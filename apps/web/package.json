@@ -1,0 +1,15 @@
+{
+  "name": "@canopy/web",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Local-first static web application shell (UI, persistence, 3D rendering).",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@canopy/shared": "*",
+    "@canopy/calculations": "*",
+    "@canopy/geometry": "*"
+  }
+}

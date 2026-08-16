@@ -1,0 +1,20 @@
+{
+  "name": "patio-canopy-designer",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Local-first patio canopy calculator and interactive 3D designer",
+  "type": "module",
+  "engines": {
+    "node": ">=24.19.0 <25"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}
