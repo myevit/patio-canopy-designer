@@ -1,5 +1,11 @@
-import type { ProjectDocument } from "../design-schema.js";
+import type { FanDistribution, FanElevationRule, FanTarget, ProjectDocument } from "../design-schema.js";
 import type { Vector3Mm } from "../units.js";
+
+export interface FanMemberTemplatePatch {
+  sectionId?: string;
+  materialId?: string;
+  rollRad?: number;
+}
 
 export type DocumentCommand =
   | { type: "create-house-outline"; outlineId: string; points: Vector3Mm[] }
@@ -65,7 +71,30 @@ export type DocumentCommand =
       memberId: string;
       patch: Partial<{ sectionId: string; materialId: string; rollRad: number }>;
     }
-  | { type: "delete-beam"; memberId: string };
+  | { type: "delete-beam"; memberId: string }
+  | {
+      type: "add-fan-field";
+      fanFieldId: string;
+      sourceAnchorId: string;
+      target: FanTarget;
+      distribution: FanDistribution;
+      reversed: boolean;
+      elevationRule: FanElevationRule;
+      memberTemplate: { sectionId: string; materialId?: string; rollRad?: number };
+    }
+  | {
+      type: "update-fan-field";
+      fanFieldId: string;
+      patch: Partial<{
+        sourceAnchorId: string;
+        target: FanTarget;
+        distribution: FanDistribution;
+        reversed: boolean;
+        elevationRule: FanElevationRule;
+        memberTemplate: FanMemberTemplatePatch;
+      }>;
+    }
+  | { type: "delete-fan-field"; fanFieldId: string };
 
 export type CommandResult =
   | { ok: true; document: ProjectDocument }

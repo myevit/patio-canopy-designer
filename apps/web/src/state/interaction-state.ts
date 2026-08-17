@@ -1,4 +1,5 @@
 import type { Vector3Mm } from "@canopy/shared";
+import type { FanDraft } from "./fan-draft.js";
 
 /**
  * Interaction states scoped for Milestone 0/1. Authoring tools (House, Post,
@@ -12,6 +13,8 @@ export type InteractionState =
   | { status: "drawing" }
   | { status: "drawing-house-outline"; points: Vector3Mm[]; error?: string }
   | { status: "drawing-beam"; startAnchorId: string | null }
+  | { status: "drawing-fan"; sourceAnchorId: string | null; pendingEdgeStartAnchorId: string | null }
+  | { status: "previewing-fan"; draft: FanDraft }
   | { status: "placing" }
   | { status: "dragging"; objectId: string }
   | { status: "invalid"; reason: string };

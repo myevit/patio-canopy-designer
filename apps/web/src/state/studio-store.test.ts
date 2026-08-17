@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createFanDraft } from "./fan-draft.js";
 import { initialStudioState, studioReducer } from "./studio-store.js";
 
 describe("initialStudioState", () => {
@@ -147,6 +148,83 @@ describe("studioReducer: beam drawing", () => {
     const drawing = studioReducer(initialStudioState, { type: "select-tool", tool: "beam" });
     const started = studioReducer(drawing, { type: "set-beam-start-anchor", anchorId: "anchor-1" });
     const next = studioReducer(started, { type: "escape" });
+    expect(next.tool).toBe("select");
+    expect(next.interaction).toEqual({ status: "idle" });
+  });
+});
+
+describe("studioReducer: fan drawing", () => {
+  it("switches to the Fan tool and enters a drawing-fan interaction awaiting a source anchor", () => {
+    const next = studioReducer(initialStudioState, { type: "select-tool", tool: "fan" });
+    expect(next.interaction).toEqual({
+      status: "drawing-fan",
+      sourceAnchorId: null,
+      pendingEdgeStartAnchorId: null,
+    });
+  });
+
+  it("sets the fan source anchor", () => {
+    const drawing = studioReducer(initialStudioState, { type: "select-tool", tool: "fan" });
+    const next = studioReducer(drawing, { type: "set-fan-source-anchor", anchorId: "anchor-1" });
+    expect(next.interaction).toEqual({
+      status: "drawing-fan",
+      sourceAnchorId: "anchor-1",
+      pendingEdgeStartAnchorId: null,
+    });
+  });
+
+  it("sets a pending edge-start anchor once the source is chosen", () => {
+    let state = studioReducer(initialStudioState, { type: "select-tool", tool: "fan" });
+    state = studioReducer(state, { type: "set-fan-source-anchor", anchorId: "anchor-1" });
+    const next = studioReducer(state, { type: "set-fan-edge-pending-anchor", anchorId: "anchor-2" });
+    expect(next.interaction).toEqual({
+      status: "drawing-fan",
+      sourceAnchorId: "anchor-1",
+      pendingEdgeStartAnchorId: "anchor-2",
+    });
+  });
+
+  it("ignores fan anchor actions when not in the drawing-fan interaction", () => {
+    const next = studioReducer(initialStudioState, { type: "set-fan-source-anchor", anchorId: "anchor-1" });
+    expect(next).toEqual(initialStudioState);
+  });
+
+  it("starts a fan preview with a fully-formed draft", () => {
+    const draft = createFanDraft("anchor-1", { kind: "member", memberId: "member-1" }, "sec-rafter");
+    const next = studioReducer(initialStudioState, { type: "start-fan-preview", draft });
+    expect(next.interaction).toEqual({ status: "previewing-fan", draft });
+  });
+
+  it("updates the fan draft in place while previewing", () => {
+    const draft = createFanDraft("anchor-1", { kind: "member", memberId: "member-1" }, "sec-rafter");
+    const previewing = studioReducer(initialStudioState, { type: "start-fan-preview", draft });
+    const next = studioReducer(previewing, { type: "update-fan-draft", patch: { count: 7, reversed: true } });
+    expect(next.interaction).toEqual({
+      status: "previewing-fan",
+      draft: { ...draft, count: 7, reversed: true },
+    });
+  });
+
+  it("ignores update-fan-draft when not previewing a fan field", () => {
+    const next = studioReducer(initialStudioState, { type: "update-fan-draft", patch: { count: 7 } });
+    expect(next).toEqual(initialStudioState);
+  });
+
+  it("cancelling a fan preview restarts the drawing-fan interaction from scratch", () => {
+    const draft = createFanDraft("anchor-1", { kind: "member", memberId: "member-1" }, "sec-rafter");
+    const previewing = studioReducer(initialStudioState, { type: "start-fan-preview", draft });
+    const next = studioReducer(previewing, { type: "cancel-fan-preview" });
+    expect(next.interaction).toEqual({
+      status: "drawing-fan",
+      sourceAnchorId: null,
+      pendingEdgeStartAnchorId: null,
+    });
+  });
+
+  it("escape cancels an in-progress fan field entirely, returning to the Select tool", () => {
+    let state = studioReducer(initialStudioState, { type: "select-tool", tool: "fan" });
+    state = studioReducer(state, { type: "set-fan-source-anchor", anchorId: "anchor-1" });
+    const next = studioReducer(state, { type: "escape" });
     expect(next.tool).toBe("select");
     expect(next.interaction).toEqual({ status: "idle" });
   });

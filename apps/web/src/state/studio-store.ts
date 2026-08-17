@@ -1,4 +1,5 @@
 import type { Vector3Mm } from "@canopy/shared";
+import type { FanDraft } from "./fan-draft.js";
 import type { InteractionState } from "./interaction-state.js";
 import type { SelectedVertex } from "./selected-vertex.js";
 import type { ToolId } from "./tool.js";
@@ -25,6 +26,11 @@ export type StudioAction =
   | { type: "set-outline-error"; error: string | undefined }
   | { type: "set-interaction"; interaction: InteractionState }
   | { type: "set-beam-start-anchor"; anchorId: string | null }
+  | { type: "set-fan-source-anchor"; anchorId: string }
+  | { type: "set-fan-edge-pending-anchor"; anchorId: string }
+  | { type: "start-fan-preview"; draft: FanDraft }
+  | { type: "update-fan-draft"; patch: Partial<FanDraft> }
+  | { type: "cancel-fan-preview" }
   | { type: "set-view-mode"; viewMode: ViewMode }
   | { type: "set-drawer-tab"; tab: DrawerTab }
   | { type: "toggle-drawer" }
@@ -52,7 +58,7 @@ function interactionForTool(tool: ToolId): InteractionState {
     case "beam":
       return { status: "drawing-beam", startAnchorId: null };
     case "fan":
-      return { status: "drawing" };
+      return { status: "drawing-fan", sourceAnchorId: null, pendingEdgeStartAnchorId: null };
   }
 }
 
@@ -118,6 +124,28 @@ export function studioReducer(state: StudioState, action: StudioAction): StudioS
       if (state.interaction.status !== "drawing-beam") return state;
       return { ...state, interaction: { status: "drawing-beam", startAnchorId: action.anchorId } };
     }
+    case "set-fan-source-anchor": {
+      if (state.interaction.status !== "drawing-fan") return state;
+      return {
+        ...state,
+        interaction: { status: "drawing-fan", sourceAnchorId: action.anchorId, pendingEdgeStartAnchorId: null },
+      };
+    }
+    case "set-fan-edge-pending-anchor": {
+      if (state.interaction.status !== "drawing-fan") return state;
+      return { ...state, interaction: { ...state.interaction, pendingEdgeStartAnchorId: action.anchorId } };
+    }
+    case "start-fan-preview":
+      return { ...state, interaction: { status: "previewing-fan", draft: action.draft } };
+    case "update-fan-draft": {
+      if (state.interaction.status !== "previewing-fan") return state;
+      return {
+        ...state,
+        interaction: { status: "previewing-fan", draft: { ...state.interaction.draft, ...action.patch } },
+      };
+    }
+    case "cancel-fan-preview":
+      return { ...state, interaction: { status: "drawing-fan", sourceAnchorId: null, pendingEdgeStartAnchorId: null } };
     case "set-view-mode":
       return { ...state, viewMode: action.viewMode };
     case "set-drawer-tab":

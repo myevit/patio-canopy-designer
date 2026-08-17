@@ -534,6 +534,82 @@ describe("PlanView beam flow", () => {
   });
 });
 
+describe("PlanView fan flow", () => {
+  it("clicking a post while the Fan tool is active chooses its top anchor as the fan source", () => {
+    const onSelect = vi.fn();
+    const onChooseFanAnchor = vi.fn();
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={onSelect}
+        tool="fan"
+        onChooseFanAnchor={onChooseFanAnchor}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("scene-object-post-1"));
+    expect(onChooseFanAnchor).toHaveBeenCalledWith("anchor-top");
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("clicking a house anchor while the Fan tool is active chooses it", () => {
+    const onChooseFanAnchor = vi.fn();
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="fan"
+        onChooseFanAnchor={onChooseFanAnchor}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("scene-object-anchor-house-1"));
+    expect(onChooseFanAnchor).toHaveBeenCalledWith("anchor-house-1");
+  });
+
+  it("clicking a member while the Fan tool is active chooses it as the fan target instead of selecting it", () => {
+    const onSelect = vi.fn();
+    const onChooseFanTargetMember = vi.fn();
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={onSelect}
+        tool="fan"
+        onChooseFanTargetMember={onChooseFanTargetMember}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("scene-object-member-1"));
+    expect(onChooseFanTargetMember).toHaveBeenCalledWith("member-1");
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("renders a preview line from the fan source to each target point", () => {
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="fan"
+        fanPreview={{
+          source: { x: 0, y: 0, z: 2700 },
+          points: [
+            { x: 100, y: 100, z: 2400 },
+            { x: 200, y: 200, z: 2400 },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByTestId("fan-preview-line-0")).toHaveAttribute("x2", "100");
+    expect(screen.getByTestId("fan-preview-line-1")).toHaveAttribute("x2", "200");
+  });
+
+  it("renders no preview lines when there is no fan preview", () => {
+    render(<PlanView scene={scene()} selectedObjectId={null} onSelect={() => {}} tool="fan" />);
+    expect(screen.queryByTestId("fan-preview-line-0")).not.toBeInTheDocument();
+  });
+});
+
 describe("PlanView roof and gutter rendering", () => {
   function sceneWithRoofOverHouse(): ScenePrimitives {
     const base = scene();

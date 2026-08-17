@@ -1,5 +1,10 @@
-import { parseProjectDocument, type ProjectDocument } from "../design-schema.js";
+import { parseProjectDocument, type Anchor, type Member, type ProjectDocument } from "../design-schema.js";
 import { selectEaveEdgeIndex } from "../eave-edge.js";
+import {
+  deriveFanFieldGeometry,
+  deriveFanFieldMemberId,
+  deriveFanFieldTargetAnchorId,
+} from "../fan-field-geometry.js";
 import { validateOutline } from "../outline-validation.js";
 import { formatZodError } from "../zod-error.js";
 import type { CommandResult, DocumentCommand } from "./types.js";
@@ -258,5 +263,124 @@ export function applyCommand(document: ProjectDocument, command: DocumentCommand
       draft.members = draft.members.filter((m) => m.id !== command.memberId);
       return finalize(draft);
     }
+
+    case "add-fan-field": {
+      const anchorsById = new Map(draft.anchors.map((a) => [a.id, a]));
+      const membersById = new Map(draft.members.map((m) => [m.id, m]));
+      const geometry = deriveFanFieldGeometry(
+        {
+          sourceAnchorId: command.sourceAnchorId,
+          target: command.target,
+          distribution: command.distribution,
+          reversed: command.reversed,
+          elevationRule: command.elevationRule,
+        },
+        anchorsById,
+        membersById,
+      );
+      if (!geometry.ok) {
+        return { ok: false, error: geometry.error };
+      }
+      const memberIds = generateFanFieldEntities(draft, command.fanFieldId, command.sourceAnchorId, command.memberTemplate, geometry.points);
+      draft.fanFields.push({
+        id: command.fanFieldId,
+        sourceAnchorId: command.sourceAnchorId,
+        target: command.target,
+        distribution: command.distribution,
+        reversed: command.reversed,
+        elevationRule: command.elevationRule,
+        memberTemplate: {
+          sectionId: command.memberTemplate.sectionId,
+          rollRad: command.memberTemplate.rollRad ?? 0,
+          ...(command.memberTemplate.materialId !== undefined ? { materialId: command.memberTemplate.materialId } : {}),
+        },
+        memberIds,
+      });
+      return finalize(draft);
+    }
+
+    case "update-fan-field": {
+      const fanField = draft.fanFields.find((f) => f.id === command.fanFieldId);
+      if (!fanField) {
+        return { ok: false, error: `Unknown fan field id: ${command.fanFieldId}` };
+      }
+
+      const sourceAnchorId = command.patch.sourceAnchorId ?? fanField.sourceAnchorId;
+      const target = command.patch.target ?? fanField.target;
+      const distribution = command.patch.distribution ?? fanField.distribution;
+      const reversed = command.patch.reversed ?? fanField.reversed;
+      const elevationRule = command.patch.elevationRule ?? fanField.elevationRule;
+      const memberTemplate = { ...fanField.memberTemplate, ...command.patch.memberTemplate };
+
+      const oldMemberIds = new Set(fanField.memberIds);
+      draft.members = draft.members.filter((m) => !oldMemberIds.has(m.id));
+      draft.anchors = draft.anchors.filter(
+        (a) => !(a.kind === "fan-target" && a.sourceRef === command.fanFieldId),
+      );
+
+      const anchorsById = new Map(draft.anchors.map((a) => [a.id, a]));
+      const membersById = new Map(draft.members.map((m) => [m.id, m]));
+      const geometry = deriveFanFieldGeometry(
+        { sourceAnchorId, target, distribution, reversed, elevationRule },
+        anchorsById,
+        membersById,
+      );
+      if (!geometry.ok) {
+        return { ok: false, error: geometry.error };
+      }
+
+      const memberIds = generateFanFieldEntities(draft, command.fanFieldId, sourceAnchorId, memberTemplate, geometry.points);
+      fanField.sourceAnchorId = sourceAnchorId;
+      fanField.target = target;
+      fanField.distribution = distribution;
+      fanField.reversed = reversed;
+      fanField.elevationRule = elevationRule;
+      fanField.memberTemplate = memberTemplate;
+      fanField.memberIds = memberIds;
+      return finalize(draft);
+    }
+
+    case "delete-fan-field": {
+      const fanField = draft.fanFields.find((f) => f.id === command.fanFieldId);
+      if (!fanField) {
+        return { ok: false, error: `Unknown fan field id: ${command.fanFieldId}` };
+      }
+      const memberIds = new Set(fanField.memberIds);
+      draft.fanFields = draft.fanFields.filter((f) => f.id !== command.fanFieldId);
+      draft.members = draft.members.filter((m) => !memberIds.has(m.id));
+      draft.anchors = draft.anchors.filter(
+        (a) => !(a.kind === "fan-target" && a.sourceRef === command.fanFieldId),
+      );
+      return finalize(draft);
+    }
   }
+}
+
+function generateFanFieldEntities(
+  draft: ProjectDocument,
+  fanFieldId: string,
+  sourceAnchorId: string,
+  memberTemplate: { sectionId: string; materialId?: string; rollRad?: number },
+  targetPoints: ProjectDocument["anchors"][number]["positionMm"][],
+): string[] {
+  const memberIds: string[] = [];
+  targetPoints.forEach((point, index) => {
+    const targetAnchorId = deriveFanFieldTargetAnchorId(fanFieldId, index);
+    const targetAnchor: Anchor = { id: targetAnchorId, kind: "fan-target", positionMm: point, sourceRef: fanFieldId };
+    draft.anchors.push(targetAnchor);
+
+    const memberId = deriveFanFieldMemberId(fanFieldId, index);
+    const member: Member = {
+      id: memberId,
+      role: "fan-rafter",
+      startAnchorId: sourceAnchorId,
+      endAnchorId: targetAnchorId,
+      sectionId: memberTemplate.sectionId,
+      rollRad: memberTemplate.rollRad ?? 0,
+      ...(memberTemplate.materialId !== undefined ? { materialId: memberTemplate.materialId } : {}),
+    };
+    draft.members.push(member);
+    memberIds.push(memberId);
+  });
+  return memberIds;
 }

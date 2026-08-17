@@ -300,6 +300,120 @@ describe("parseProjectDocument", () => {
     expect(result.success).toBe(false);
   });
 
+  function withFanFieldFixtures(doc: ProjectDocument): ProjectDocument {
+    doc.sections.push({ id: "sec-rafter", name: "Rafter", widthMm: 89, heightMm: 38 });
+    doc.anchors.push(
+      { id: "source-1", kind: "house", positionMm: { x: 0, y: 0, z: 2700 } },
+      { id: "edge-start", kind: "post-top", positionMm: { x: 0, y: 4000, z: 2300 } },
+      { id: "edge-end", kind: "post-top", positionMm: { x: 4000, y: 4000, z: 2300 } },
+    );
+    doc.members.push({
+      id: "rafter-1",
+      role: "fan-rafter",
+      startAnchorId: "source-1",
+      endAnchorId: "edge-start",
+      sectionId: "sec-rafter",
+      rollRad: 0,
+    });
+    return doc;
+  }
+
+  it("accepts a fan field with an edge target", () => {
+    const doc = withFanFieldFixtures(minimalDocument());
+    doc.fanFields.push({
+      id: "fan-1",
+      sourceAnchorId: "source-1",
+      target: { kind: "edge", startAnchorId: "edge-start", endAnchorId: "edge-end" },
+      distribution: { mode: "count", count: 3 },
+      reversed: false,
+      elevationRule: { kind: "linear" },
+      memberTemplate: { sectionId: "sec-rafter", rollRad: 0 },
+      memberIds: ["rafter-1"],
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a fan field with a parabolic elevation rule and a spacing distribution", () => {
+    const doc = withFanFieldFixtures(minimalDocument());
+    doc.fanFields.push({
+      id: "fan-1",
+      sourceAnchorId: "source-1",
+      target: { kind: "edge", startAnchorId: "edge-start", endAnchorId: "edge-end" },
+      distribution: { mode: "spacing", spacingMm: 600 },
+      reversed: true,
+      elevationRule: { kind: "parabolic", sagMm: 150 },
+      memberTemplate: { sectionId: "sec-rafter", rollRad: 0 },
+      memberIds: ["rafter-1"],
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a fan field referencing an unknown source anchor", () => {
+    const doc = withFanFieldFixtures(minimalDocument());
+    doc.fanFields.push({
+      id: "fan-1",
+      sourceAnchorId: "missing",
+      target: { kind: "edge", startAnchorId: "edge-start", endAnchorId: "edge-end" },
+      distribution: { mode: "count", count: 3 },
+      reversed: false,
+      elevationRule: { kind: "linear" },
+      memberTemplate: { sectionId: "sec-rafter", rollRad: 0 },
+      memberIds: ["rafter-1"],
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a fan field whose member target does not exist", () => {
+    const doc = withFanFieldFixtures(minimalDocument());
+    doc.fanFields.push({
+      id: "fan-1",
+      sourceAnchorId: "source-1",
+      target: { kind: "member", memberId: "missing" },
+      distribution: { mode: "count", count: 3 },
+      reversed: false,
+      elevationRule: { kind: "linear" },
+      memberTemplate: { sectionId: "sec-rafter", rollRad: 0 },
+      memberIds: ["rafter-1"],
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a fan field whose memberIds reference a member that does not exist", () => {
+    const doc = withFanFieldFixtures(minimalDocument());
+    doc.fanFields.push({
+      id: "fan-1",
+      sourceAnchorId: "source-1",
+      target: { kind: "edge", startAnchorId: "edge-start", endAnchorId: "edge-end" },
+      distribution: { mode: "count", count: 3 },
+      reversed: false,
+      elevationRule: { kind: "linear" },
+      memberTemplate: { sectionId: "sec-rafter", rollRad: 0 },
+      memberIds: ["missing-member"],
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a fan distribution count below 2", () => {
+    const doc = withFanFieldFixtures(minimalDocument());
+    doc.fanFields.push({
+      id: "fan-1",
+      sourceAnchorId: "source-1",
+      target: { kind: "edge", startAnchorId: "edge-start", endAnchorId: "edge-end" },
+      distribution: { mode: "count", count: 1 },
+      reversed: false,
+      elevationRule: { kind: "linear" },
+      memberTemplate: { sectionId: "sec-rafter", rollRad: 0 },
+      memberIds: ["rafter-1"],
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(false);
+  });
+
   it("accepts a document with a fully cross-referenced post", () => {
     const doc = minimalDocument();
     doc.sections.push({ id: "sec-post", name: "Post section", widthMm: 140, heightMm: 140 });

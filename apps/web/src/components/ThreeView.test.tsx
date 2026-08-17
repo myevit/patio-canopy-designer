@@ -207,3 +207,73 @@ describe("ThreeView beam flow", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 });
+
+describe("ThreeView fan flow", () => {
+  it("clicking a post while the Fan tool is active chooses its top anchor as the fan source", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const onChooseFanAnchor = vi.fn();
+    render(
+      <ThreeView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={onSelect}
+        tool="fan"
+        onChooseFanAnchor={onChooseFanAnchor}
+      />,
+    );
+    await user.click(screen.getByTestId("scene-object-post-1"));
+    expect(onChooseFanAnchor).toHaveBeenCalledWith("anchor-top");
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("clicking a house anchor while the Fan tool is active chooses it", async () => {
+    const user = userEvent.setup();
+    const onChooseFanAnchor = vi.fn();
+    render(
+      <ThreeView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="fan"
+        onChooseFanAnchor={onChooseFanAnchor}
+      />,
+    );
+    await user.click(screen.getByTestId("scene-object-anchor-house-1"));
+    expect(onChooseFanAnchor).toHaveBeenCalledWith("anchor-house-1");
+  });
+
+  it("clicking a member while the Fan tool is active chooses it as the fan target", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const onChooseFanTargetMember = vi.fn();
+    render(
+      <ThreeView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={onSelect}
+        tool="fan"
+        onChooseFanTargetMember={onChooseFanTargetMember}
+      />,
+    );
+    await user.click(screen.getByTestId("scene-object-member-1"));
+    expect(onChooseFanTargetMember).toHaveBeenCalledWith("member-1");
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("the accessible fallback list routes selection through the fan handlers when the Fan tool is active", async () => {
+    const user = userEvent.setup();
+    const onChooseFanAnchor = vi.fn();
+    render(
+      <ThreeView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="fan"
+        onChooseFanAnchor={onChooseFanAnchor}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Select post-1 in 3D scene" }));
+    expect(onChooseFanAnchor).toHaveBeenCalledWith("anchor-top");
+  });
+});

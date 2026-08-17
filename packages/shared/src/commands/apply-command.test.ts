@@ -644,6 +644,206 @@ describe("applyCommand: beams", () => {
   });
 });
 
+describe("applyCommand: fan fields", () => {
+  function withSourceAndTarget(): ProjectDocument {
+    const doc = baseDoc();
+    doc.sections.push({ id: "sec-rafter", name: "Rafter", widthMm: 89, heightMm: 38 });
+    doc.anchors.push(
+      { id: "source-1", kind: "house", positionMm: { x: 0, y: 0, z: 2700 } },
+      { id: "edge-start", kind: "post-top", positionMm: { x: 0, y: 4000, z: 2300 } },
+      { id: "edge-end", kind: "post-top", positionMm: { x: 4000, y: 4000, z: 2300 } },
+    );
+    return doc;
+  }
+
+  function addField(doc: ProjectDocument, overrides: Partial<Record<string, unknown>> = {}) {
+    return applyCommand(doc, {
+      type: "add-fan-field",
+      fanFieldId: "fan-1",
+      sourceAnchorId: "source-1",
+      target: { kind: "edge", startAnchorId: "edge-start", endAnchorId: "edge-end" },
+      distribution: { mode: "count", count: 3 },
+      reversed: false,
+      elevationRule: { kind: "linear" },
+      memberTemplate: { sectionId: "sec-rafter" },
+      ...overrides,
+    } as never);
+  }
+
+  it("adds a fan field, generating deterministic target anchors and rafter members", () => {
+    const doc = withSourceAndTarget();
+    const result = addField(doc);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.fanFields).toHaveLength(1);
+      const field = result.document.fanFields[0]!;
+      expect(field.memberIds).toEqual(["fan-1::rafter::0", "fan-1::rafter::1", "fan-1::rafter::2"]);
+      expect(result.document.members).toHaveLength(3);
+      expect(result.document.members.every((m) => m.role === "fan-rafter")).toBe(true);
+      expect(result.document.members.every((m) => m.startAnchorId === "source-1")).toBe(true);
+      const targetAnchors = result.document.anchors.filter((a) => a.kind === "fan-target");
+      expect(targetAnchors).toHaveLength(3);
+      expect(targetAnchors[0]!.positionMm).toEqual({ x: 0, y: 4000, z: 2300 });
+      expect(targetAnchors[2]!.positionMm).toEqual({ x: 4000, y: 4000, z: 2300 });
+    }
+  });
+
+  it("supports a member target", () => {
+    const doc = withSourceAndTarget();
+    doc.sections.push({ id: "sec-beam", name: "Beam", widthMm: 184, heightMm: 38 });
+    const withBeam = applyCommand(doc, {
+      type: "add-beam",
+      memberId: "target-beam",
+      startAnchorId: "edge-start",
+      endAnchorId: "edge-end",
+      sectionId: "sec-beam",
+    });
+    if (!withBeam.ok) throw new Error("setup failed");
+    const result = addField(withBeam.document, { target: { kind: "member", memberId: "target-beam" } });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.fanFields[0]!.memberIds).toHaveLength(3);
+    }
+  });
+
+  it("rejects a degenerate fan field and never mutates the original document", () => {
+    const doc = withSourceAndTarget();
+    const snapshot = JSON.parse(JSON.stringify(doc));
+    const result = addField(doc, {
+      target: { kind: "edge", startAnchorId: "edge-start", endAnchorId: "edge-start" },
+    });
+    expect(result.ok).toBe(false);
+    expect(doc).toEqual(snapshot);
+  });
+
+  it("rejects a fan field referencing an unreachable source anchor", () => {
+    const doc = withSourceAndTarget();
+    const result = addField(doc, { sourceAnchorId: "missing" });
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects a fan field referencing an unreachable target member", () => {
+    const doc = withSourceAndTarget();
+    const result = addField(doc, { target: { kind: "member", memberId: "missing" } });
+    expect(result.ok).toBe(false);
+  });
+
+  function withField(): ProjectDocument {
+    const result = addField(withSourceAndTarget());
+    if (!result.ok) throw new Error("setup failed");
+    return result.document;
+  }
+
+  it("regenerates members deterministically when the target is edited", () => {
+    const doc = withField();
+    const originalMemberIds = doc.fanFields[0]!.memberIds;
+    const result = applyCommand(doc, {
+      type: "update-fan-field",
+      fanFieldId: "fan-1",
+      patch: { target: { kind: "edge", startAnchorId: "edge-start", endAnchorId: "edge-end" }, reversed: true },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const field = result.document.fanFields[0]!;
+      expect(field.memberIds).toEqual(originalMemberIds);
+      expect(field.reversed).toBe(true);
+      const rafter0 = result.document.members.find((m) => m.id === field.memberIds[0])!;
+      const targetAnchor = result.document.anchors.find((a) => a.id === rafter0.endAnchorId)!;
+      // Reversed, so rafter 0 now lands on the far end of the target edge.
+      expect(targetAnchor.positionMm).toEqual({ x: 4000, y: 4000, z: 2300 });
+    }
+  });
+
+  it("changing the count regenerates the exact number of derived members", () => {
+    const doc = withField();
+    const result = applyCommand(doc, {
+      type: "update-fan-field",
+      fanFieldId: "fan-1",
+      patch: { distribution: { mode: "count", count: 5 } },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.fanFields[0]!.memberIds).toHaveLength(5);
+      expect(result.document.members).toHaveLength(5);
+      expect(result.document.anchors.filter((a) => a.kind === "fan-target")).toHaveLength(5);
+    }
+  });
+
+  it("rejects an update that would make the field degenerate, leaving the document unchanged", () => {
+    const doc = withField();
+    const snapshot = JSON.parse(JSON.stringify(doc));
+    const result = applyCommand(doc, {
+      type: "update-fan-field",
+      fanFieldId: "fan-1",
+      patch: { target: { kind: "edge", startAnchorId: "edge-start", endAnchorId: "edge-start" } },
+    });
+    expect(result.ok).toBe(false);
+    expect(doc).toEqual(snapshot);
+  });
+
+  it("blocks regeneration that would orphan a joint referencing a derived rafter", () => {
+    const doc = withField();
+    // Regenerating with fewer members drops the highest-index derived rafter
+    // (ids are stable by index, so shrinking the count is what orphans it).
+    doc.joints.push({
+      id: "joint-1",
+      connectedMemberIds: [doc.fanFields[0]!.memberIds[2]!],
+      positionMm: { x: 0, y: 4000, z: 2300 },
+      crossingBehavior: "unresolved",
+      engineeringStatus: "engineer-review-required",
+    });
+    const result = applyCommand(doc, {
+      type: "update-fan-field",
+      fanFieldId: "fan-1",
+      patch: { distribution: { mode: "count", count: 2 } },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects updating an unknown fan field", () => {
+    const doc = withSourceAndTarget();
+    const result = applyCommand(doc, { type: "update-fan-field", fanFieldId: "missing", patch: { reversed: true } });
+    expect(result.ok).toBe(false);
+  });
+
+  it("deletes a fan field along with its derived anchors and members", () => {
+    const doc = withField();
+    const result = applyCommand(doc, { type: "delete-fan-field", fanFieldId: "fan-1" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.fanFields).toHaveLength(0);
+      expect(result.document.members).toHaveLength(0);
+      expect(result.document.anchors.filter((a) => a.kind === "fan-target")).toHaveLength(0);
+    }
+  });
+
+  it("blocks deleting a fan field whose derived rafter is referenced by a joint", () => {
+    const doc = withField();
+    doc.joints.push({
+      id: "joint-1",
+      connectedMemberIds: [doc.fanFields[0]!.memberIds[0]!],
+      positionMm: { x: 0, y: 4000, z: 2300 },
+      crossingBehavior: "unresolved",
+      engineeringStatus: "engineer-review-required",
+    });
+    const result = applyCommand(doc, { type: "delete-fan-field", fanFieldId: "fan-1" });
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects deleting an unknown fan field", () => {
+    const doc = withSourceAndTarget();
+    const result = applyCommand(doc, { type: "delete-fan-field", fanFieldId: "missing" });
+    expect(result.ok).toBe(false);
+  });
+
+  it("blocks deleting an individual derived rafter member directly, protecting fan field referential integrity", () => {
+    const doc = withField();
+    const memberId = doc.fanFields[0]!.memberIds[0]!;
+    const result = applyCommand(doc, { type: "delete-beam", memberId });
+    expect(result.ok).toBe(false);
+  });
+});
+
 describe("applyCommand: update-gutter", () => {
   function withRoofedOutline(): ProjectDocument {
     const withOutlineResult = applyCommand(baseDoc(), {

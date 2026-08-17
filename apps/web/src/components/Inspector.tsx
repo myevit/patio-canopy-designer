@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { SceneGutter, SceneObject, SceneRoofPlane } from "@canopy/geometry";
-import type { Section, Vector3Mm } from "@canopy/shared";
+import type { FanDistribution, FanElevationRule, FanField, Section, Vector3Mm } from "@canopy/shared";
+import type { FanDraft } from "../state/fan-draft.js";
 import type { SelectedVertex } from "../state/selected-vertex.js";
 import type { ToolId } from "../state/tool.js";
 
@@ -218,6 +219,202 @@ function PostPlacementPanel({ onPlacePost }: PostPlacementPanelProps) {
   );
 }
 
+export interface FanFieldMemberTemplatePatch {
+  sectionId?: string;
+}
+
+export interface FanFieldPatch {
+  distribution?: FanDistribution;
+  reversed?: boolean;
+  elevationRule?: FanElevationRule;
+  memberTemplate?: FanFieldMemberTemplatePatch;
+}
+
+interface FanDistributionFieldsProps {
+  distributionMode: "count" | "spacing";
+  count: number;
+  spacingMm: number;
+  onChangeMode: (mode: "count" | "spacing") => void;
+  onChangeCount: (count: number) => void;
+  onChangeSpacing: (spacingMm: number) => void;
+}
+
+function FanDistributionFields({
+  distributionMode,
+  count,
+  spacingMm,
+  onChangeMode,
+  onChangeCount,
+  onChangeSpacing,
+}: FanDistributionFieldsProps) {
+  const modeId = useId();
+  return (
+    <>
+      <p className="inspector__field">
+        <label htmlFor={modeId}>Distribution</label>
+        <select
+          id={modeId}
+          value={distributionMode}
+          onChange={(event) => onChangeMode(event.target.value as "count" | "spacing")}
+        >
+          <option value="count">Member count</option>
+          <option value="spacing">Spacing</option>
+        </select>
+      </p>
+      {distributionMode === "count" ? (
+        <NumberField label="Count" value={count} onCommit={(value) => onChangeCount(Math.round(value))} />
+      ) : (
+        <NumberField label="Spacing (mm)" value={spacingMm} onCommit={onChangeSpacing} />
+      )}
+    </>
+  );
+}
+
+interface FanElevationFieldsProps {
+  elevationMode: "linear" | "parabolic";
+  sagMm: number;
+  onChangeMode: (mode: "linear" | "parabolic") => void;
+  onChangeSag: (sagMm: number) => void;
+}
+
+function FanElevationFields({ elevationMode, sagMm, onChangeMode, onChangeSag }: FanElevationFieldsProps) {
+  const modeId = useId();
+  return (
+    <>
+      <p className="inspector__field">
+        <label htmlFor={modeId}>Elevation rule</label>
+        <select
+          id={modeId}
+          value={elevationMode}
+          onChange={(event) => onChangeMode(event.target.value as "linear" | "parabolic")}
+        >
+          <option value="linear">Linear (ruled)</option>
+          <option value="parabolic">Parabolic sag (saddle)</option>
+        </select>
+      </p>
+      {elevationMode === "parabolic" && <NumberField label="Sag (mm)" value={sagMm} onCommit={onChangeSag} />}
+    </>
+  );
+}
+
+interface FanPreviewPanelProps {
+  draft: FanDraft;
+  sections: Section[];
+  onUpdateDraft: (patch: Partial<FanDraft>) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+}
+
+function FanPreviewPanel({ draft, sections, onUpdateDraft, onCommit, onCancel }: FanPreviewPanelProps) {
+  return (
+    <div className="inspector__drawing-panel">
+      <h3>Fan field preview</h3>
+      <FanDistributionFields
+        distributionMode={draft.distributionMode}
+        count={draft.count}
+        spacingMm={draft.spacingMm}
+        onChangeMode={(distributionMode) => onUpdateDraft({ distributionMode })}
+        onChangeCount={(count) => onUpdateDraft({ count })}
+        onChangeSpacing={(spacingMm) => onUpdateDraft({ spacingMm })}
+      />
+      <p className="inspector__field">
+        <label>
+          <input
+            type="checkbox"
+            checked={draft.reversed}
+            onChange={(event) => onUpdateDraft({ reversed: event.target.checked })}
+          />
+          Reverse direction
+        </label>
+      </p>
+      <FanElevationFields
+        elevationMode={draft.elevationMode}
+        sagMm={draft.sagMm}
+        onChangeMode={(elevationMode) => onUpdateDraft({ elevationMode })}
+        onChangeSag={(sagMm) => onUpdateDraft({ sagMm })}
+      />
+      {sections.length > 0 && (
+        <SectionField
+          sections={sections}
+          sectionId={draft.sectionId}
+          onCommit={(sectionId) => onUpdateDraft({ sectionId })}
+        />
+      )}
+      <button type="button" onClick={onCommit}>
+        Commit fan field
+      </button>
+      <button type="button" onClick={onCancel}>
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+interface FanFieldEditPanelProps {
+  fanField: FanField;
+  sections: Section[];
+  onUpdate: (patch: FanFieldPatch) => CommandOutcome;
+  onDelete: () => void;
+}
+
+function FanFieldEditPanel({ fanField, sections, onUpdate, onDelete }: FanFieldEditPanelProps) {
+  const distributionMode = fanField.distribution.mode;
+  const count = fanField.distribution.mode === "count" ? fanField.distribution.count : 5;
+  const spacingMm = fanField.distribution.mode === "spacing" ? fanField.distribution.spacingMm : 600;
+  const elevationMode = fanField.elevationRule.kind;
+  const sagMm = fanField.elevationRule.kind === "parabolic" ? fanField.elevationRule.sagMm : 150;
+
+  return (
+    <div className="inspector__drawing-panel">
+      <h3>Fan field</h3>
+      <dl>
+        <dt>ID</dt>
+        <dd>{fanField.id}</dd>
+        <dt>Members</dt>
+        <dd>{fanField.memberIds.length}</dd>
+      </dl>
+      <FanDistributionFields
+        distributionMode={distributionMode}
+        count={count}
+        spacingMm={spacingMm}
+        onChangeMode={(mode) =>
+          onUpdate({ distribution: mode === "count" ? { mode: "count", count } : { mode: "spacing", spacingMm } })
+        }
+        onChangeCount={(nextCount) => onUpdate({ distribution: { mode: "count", count: nextCount } })}
+        onChangeSpacing={(nextSpacingMm) => onUpdate({ distribution: { mode: "spacing", spacingMm: nextSpacingMm } })}
+      />
+      <p className="inspector__field">
+        <label>
+          <input
+            type="checkbox"
+            checked={fanField.reversed}
+            onChange={(event) => onUpdate({ reversed: event.target.checked })}
+          />
+          Reverse direction
+        </label>
+      </p>
+      <FanElevationFields
+        elevationMode={elevationMode}
+        sagMm={sagMm}
+        onChangeMode={(mode) =>
+          onUpdate({ elevationRule: mode === "linear" ? { kind: "linear" } : { kind: "parabolic", sagMm } })
+        }
+        onChangeSag={(nextSagMm) => onUpdate({ elevationRule: { kind: "parabolic", sagMm: nextSagMm } })}
+      />
+      {sections.length > 0 && (
+        <SectionField
+          sections={sections}
+          sectionId={fanField.memberTemplate.sectionId}
+          onCommit={(sectionId) => onUpdate({ memberTemplate: { sectionId } })}
+        />
+      )}
+      <button type="button" onClick={onDelete}>
+        Delete fan field
+      </button>
+    </div>
+  );
+}
+
 function formatDegrees(radians: number): number {
   return Number(((radians * 180) / Math.PI).toFixed(4));
 }
@@ -256,6 +453,13 @@ export interface InspectorProps {
   onDeletePost?: (postId: string) => void;
   onUpdateBeam?: (memberId: string, patch: BeamPatch) => CommandOutcome;
   onDeleteBeam?: (memberId: string) => void;
+  fanDraft?: FanDraft | null;
+  onUpdateFanDraft?: (patch: Partial<FanDraft>) => void;
+  onCommitFanField?: () => void;
+  onCancelFanPreview?: () => void;
+  fanFieldForSelected?: FanField | null;
+  onUpdateFanField?: (fanFieldId: string, patch: FanFieldPatch) => CommandOutcome;
+  onDeleteFanField?: (fanFieldId: string) => void;
 }
 
 export function Inspector({
@@ -282,6 +486,13 @@ export function Inspector({
   onDeletePost = () => {},
   onUpdateBeam = () => {},
   onDeleteBeam = () => {},
+  fanDraft = null,
+  onUpdateFanDraft = () => {},
+  onCommitFanField = () => {},
+  onCancelFanPreview = () => {},
+  fanFieldForSelected = null,
+  onUpdateFanField = () => ({ ok: true }),
+  onDeleteFanField = () => {},
 }: InspectorProps) {
   if (selectedVertex && vertexOutline) {
     const point = vertexOutline.points[selectedVertex.index];
@@ -320,6 +531,14 @@ export function Inspector({
           onAddPoint={onAddDrawingPoint}
           onRemoveLastPoint={onRemoveLastDrawingPoint}
           onCloseOutline={onCloseDrawing}
+        />
+      ) : fanDraft ? (
+        <FanPreviewPanel
+          draft={fanDraft}
+          sections={sections}
+          onUpdateDraft={onUpdateFanDraft}
+          onCommit={onCommitFanField}
+          onCancel={onCancelFanPreview}
         />
       ) : tool === "post" ? (
         <PostPlacementPanel onPlacePost={onPlacePost} />
@@ -452,6 +671,14 @@ export function Inspector({
           <button type="button" onClick={() => onDeleteBeam(selected.id)}>
             Delete beam
           </button>
+          {fanFieldForSelected && (
+            <FanFieldEditPanel
+              fanField={fanFieldForSelected}
+              sections={sections}
+              onUpdate={(patch) => onUpdateFanField(fanFieldForSelected.id, patch)}
+              onDelete={() => onDeleteFanField(fanFieldForSelected.id)}
+            />
+          )}
         </>
       )}
       {selected?.kind === "joint" && (

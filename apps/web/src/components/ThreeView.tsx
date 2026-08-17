@@ -51,6 +51,8 @@ export interface ThreeViewProps {
   onSelect: (id: string) => void;
   tool?: ToolId;
   onChooseBeamAnchor?: (anchorId: string) => void;
+  onChooseFanAnchor?: (anchorId: string) => void;
+  onChooseFanTargetMember?: (memberId: string) => void;
 }
 
 function handleClick(event: ThreeEvent<MouseEvent>, id: string, onSelect: (id: string) => void) {
@@ -64,6 +66,8 @@ export function ThreeView({
   onSelect,
   tool = "select",
   onChooseBeamAnchor = () => {},
+  onChooseFanAnchor = () => {},
+  onChooseFanTargetMember = () => {},
 }: ThreeViewProps) {
   const selectableObjects = [...scene.posts, ...scene.members, ...scene.joints];
   const accessibleObjects = [...selectableObjects, ...scene.houseAnchors];
@@ -71,8 +75,18 @@ export function ThreeView({
     event.stopPropagation();
     if (tool === "beam") {
       onChooseBeamAnchor(topAnchorId);
+    } else if (tool === "fan") {
+      onChooseFanAnchor(topAnchorId);
     } else {
       onSelect(postId);
+    }
+  }
+  function handleMemberClick(event: ThreeEvent<MouseEvent>, memberId: string) {
+    event.stopPropagation();
+    if (tool === "fan") {
+      onChooseFanTargetMember(memberId);
+    } else {
+      onSelect(memberId);
     }
   }
 
@@ -134,7 +148,11 @@ export function ThreeView({
           position={toThreeVector(anchor.position)}
           onClick={(event) => {
             event.stopPropagation();
-            if (tool === "beam") onChooseBeamAnchor(anchor.id);
+            if (tool === "beam") {
+              onChooseBeamAnchor(anchor.id);
+            } else if (tool === "fan") {
+              onChooseFanAnchor(anchor.id);
+            }
           }}
         >
           <boxGeometry args={[60, 60, 60]} />
@@ -153,7 +171,7 @@ export function ThreeView({
             userData={{ sourceObjectId: member.id, selected }}
             position={transform.center}
             quaternion={transform.quaternion}
-            onClick={(event) => handleClick(event, member.id, onSelect)}
+            onClick={(event) => handleMemberClick(event, member.id)}
           >
             <boxGeometry args={[member.widthMm, transform.length, member.heightMm]} />
             <meshStandardMaterial color={selected ? "#f2a600" : "#5b7c99"} />
@@ -190,6 +208,12 @@ export function ThreeView({
                 onChooseBeamAnchor(object.topAnchorId);
               } else if (tool === "beam" && object.kind === "house-anchor") {
                 onChooseBeamAnchor(object.id);
+              } else if (tool === "fan" && object.kind === "post") {
+                onChooseFanAnchor(object.topAnchorId);
+              } else if (tool === "fan" && object.kind === "house-anchor") {
+                onChooseFanAnchor(object.id);
+              } else if (tool === "fan" && object.kind === "member") {
+                onChooseFanTargetMember(object.id);
               } else if (object.kind !== "house-anchor") {
                 onSelect(object.id);
               }

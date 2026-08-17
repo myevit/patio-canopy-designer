@@ -47,6 +47,59 @@ describe("StatusBar", () => {
     expect(screen.getByText(/choose.*end anchor/i)).toBeInTheDocument();
   });
 
+  it("prompts for a source anchor at the beginning of the fan flow", () => {
+    render(
+      <StatusBar
+        tool="fan"
+        interaction={{ status: "drawing-fan", sourceAnchorId: null, pendingEdgeStartAnchorId: null }}
+      />,
+    );
+    expect(screen.getByText(/choose.*fan source anchor/i)).toBeInTheDocument();
+  });
+
+  it("prompts for a fan target once the source anchor is chosen", () => {
+    render(
+      <StatusBar
+        tool="fan"
+        interaction={{ status: "drawing-fan", sourceAnchorId: "anchor-1", pendingEdgeStartAnchorId: null }}
+      />,
+    );
+    expect(screen.getByText(/choose.*fan target/i)).toBeInTheDocument();
+  });
+
+  it("prompts for a second target anchor once a fan edge start anchor is pending", () => {
+    render(
+      <StatusBar
+        tool="fan"
+        interaction={{ status: "drawing-fan", sourceAnchorId: "anchor-1", pendingEdgeStartAnchorId: "anchor-2" }}
+      />,
+    );
+    expect(screen.getByText(/second fan target anchor/i)).toBeInTheDocument();
+  });
+
+  it("shows a previewing message once a fan field draft is ready to commit", () => {
+    render(
+      <StatusBar
+        tool="fan"
+        interaction={{
+          status: "previewing-fan",
+          draft: {
+            sourceAnchorId: "anchor-1",
+            target: { kind: "member", memberId: "member-1" },
+            distributionMode: "count",
+            count: 5,
+            spacingMm: 600,
+            reversed: false,
+            elevationMode: "linear",
+            sagMm: 150,
+            sectionId: "sec-rafter",
+          },
+        }}
+      />,
+    );
+    expect(screen.getByText(/previewing fan field/i)).toBeInTheDocument();
+  });
+
   it("shows a persistence error when one is present", () => {
     render(<StatusBar tool="select" interaction={{ status: "idle" }} persistenceError="disk full" />);
     expect(screen.getByText(/disk full/i)).toBeInTheDocument();

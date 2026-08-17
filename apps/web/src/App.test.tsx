@@ -420,6 +420,83 @@ describe("App: posts and beams", () => {
   });
 });
 
+describe("App: fan fields", () => {
+  it("Fan tool: choosing a source anchor then a target member previews and commits a fan field", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const membersBefore = screen.getAllByTestId(/^scene-object-(member-|fan-field-)/).length;
+
+    await user.click(screen.getByRole("button", { name: "Fan" }));
+    expect(screen.getByRole("status")).toHaveTextContent(/fan source anchor/i);
+    await user.click(screen.getByTestId("scene-object-post-1"));
+    expect(screen.getByRole("status")).toHaveTextContent(/fan target/i);
+    await user.click(screen.getByTestId("scene-object-member-perim-2"));
+
+    expect(screen.getByRole("button", { name: /commit fan field/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /commit fan field/i }));
+
+    const membersAfter = screen.getAllByTestId(/^scene-object-(member-|fan-field-)/);
+    expect(membersAfter.length).toBe(membersBefore + 5);
+    expect(screen.getByRole("button", { name: "Select" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("cancelling a fan preview discards the draft without creating any members", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const membersBefore = screen.getAllByTestId(/^scene-object-(member-|fan-field-)/).length;
+
+    await user.click(screen.getByRole("button", { name: "Fan" }));
+    await user.click(screen.getByTestId("scene-object-post-1"));
+    await user.click(screen.getByTestId("scene-object-member-perim-2"));
+    await user.click(screen.getByRole("button", { name: /^cancel$/i }));
+
+    expect(screen.getAllByTestId(/^scene-object-(member-|fan-field-)/).length).toBe(membersBefore);
+    expect(screen.getByRole("status")).toHaveTextContent(/fan source anchor/i);
+  });
+
+  it("selecting a derived rafter shows the parent fan field's editable count, and changing it regenerates members", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Fan" }));
+    await user.click(screen.getByTestId("scene-object-post-1"));
+    await user.click(screen.getByTestId("scene-object-member-perim-2"));
+    await user.click(screen.getByRole("button", { name: /commit fan field/i }));
+
+    const newRafter = screen
+      .getAllByTestId(/^scene-object-(member-|fan-field-)/)
+      .find((el) => el.getAttribute("data-testid")!.includes("::rafter::0"))!;
+    fireEvent.click(newRafter);
+
+    const countField = screen.getByLabelText(/^count$/i);
+    expect(countField).toHaveValue(5);
+    fireEvent.change(countField, { target: { value: "3" } });
+    fireEvent.blur(countField);
+
+    const fanFieldId = newRafter.getAttribute("data-testid")!.replace("scene-object-", "").split("::rafter::")[0]!;
+    expect(screen.getAllByTestId(new RegExp(`^scene-object-${fanFieldId}::rafter::`)).length).toBe(3);
+  });
+
+  it("deletes a fan field via the Inspector, removing all of its derived members", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const membersBefore = screen.getAllByTestId(/^scene-object-(member-|fan-field-)/).length;
+
+    await user.click(screen.getByRole("button", { name: "Fan" }));
+    await user.click(screen.getByTestId("scene-object-post-1"));
+    await user.click(screen.getByTestId("scene-object-member-perim-2"));
+    await user.click(screen.getByRole("button", { name: /commit fan field/i }));
+
+    const newRafter = screen
+      .getAllByTestId(/^scene-object-(member-|fan-field-)/)
+      .find((el) => el.getAttribute("data-testid")!.includes("::rafter::0"))!;
+    fireEvent.click(newRafter);
+    await user.click(screen.getByRole("button", { name: /delete fan field/i }));
+
+    expect(screen.getAllByTestId(/^scene-object-(member-|fan-field-)/).length).toBe(membersBefore);
+  });
+});
+
 describe("App: undo/redo and project menu", () => {
   function mockRect() {
     const rect = { left: 0, top: 0, width: 8400, height: 5200 };

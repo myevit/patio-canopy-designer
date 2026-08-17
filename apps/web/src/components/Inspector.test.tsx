@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { SceneObject, SceneRoofPlane } from "@canopy/geometry";
+import type { FanField } from "@canopy/shared";
+import { createFanDraft } from "../state/fan-draft.js";
 import { Inspector } from "./Inspector.js";
 
 describe("Inspector", () => {
@@ -168,6 +170,144 @@ describe("Inspector beam editing", () => {
     render(<Inspector selected={member} sections={sections} onDeleteBeam={onDeleteBeam} />);
     fireEvent.click(screen.getByRole("button", { name: /delete beam/i }));
     expect(onDeleteBeam).toHaveBeenCalledWith("member-1");
+  });
+});
+
+describe("Inspector fan preview", () => {
+  const sections = [{ id: "sec-rafter", name: "89x38 rafter", widthMm: 89, heightMm: 38 }];
+
+  it("shows editable count/spacing/reversed/elevation fields for an in-progress fan field", () => {
+    const draft = createFanDraft("anchor-1", { kind: "member", memberId: "member-1" }, "sec-rafter");
+    render(<Inspector selected={undefined} sections={sections} fanDraft={draft} />);
+    expect(screen.getByLabelText(/count/i)).toHaveValue(draft.count);
+    expect(screen.getByRole("button", { name: /commit fan field/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cancel/i })).toBeInTheDocument();
+  });
+
+  it("commits a count change to the draft", () => {
+    const draft = createFanDraft("anchor-1", { kind: "member", memberId: "member-1" }, "sec-rafter");
+    const onUpdateFanDraft = vi.fn();
+    render(<Inspector selected={undefined} sections={sections} fanDraft={draft} onUpdateFanDraft={onUpdateFanDraft} />);
+    const countField = screen.getByLabelText(/count/i);
+    fireEvent.change(countField, { target: { value: "7" } });
+    fireEvent.blur(countField);
+    expect(onUpdateFanDraft).toHaveBeenCalledWith({ count: 7 });
+  });
+
+  it("switches to spacing mode and commits a spacing change", () => {
+    const draft = createFanDraft("anchor-1", { kind: "member", memberId: "member-1" }, "sec-rafter");
+    const onUpdateFanDraft = vi.fn();
+    render(<Inspector selected={undefined} sections={sections} fanDraft={draft} onUpdateFanDraft={onUpdateFanDraft} />);
+    fireEvent.change(screen.getByLabelText(/distribution/i), { target: { value: "spacing" } });
+    expect(onUpdateFanDraft).toHaveBeenCalledWith({ distributionMode: "spacing" });
+  });
+
+  it("toggles reversed", () => {
+    const draft = createFanDraft("anchor-1", { kind: "member", memberId: "member-1" }, "sec-rafter");
+    const onUpdateFanDraft = vi.fn();
+    render(<Inspector selected={undefined} sections={sections} fanDraft={draft} onUpdateFanDraft={onUpdateFanDraft} />);
+    fireEvent.click(screen.getByLabelText(/reverse direction/i));
+    expect(onUpdateFanDraft).toHaveBeenCalledWith({ reversed: true });
+  });
+
+  it("switches to parabolic elevation and reveals a sag field", () => {
+    const draft = createFanDraft("anchor-1", { kind: "member", memberId: "member-1" }, "sec-rafter");
+    const onUpdateFanDraft = vi.fn();
+    render(<Inspector selected={undefined} sections={sections} fanDraft={draft} onUpdateFanDraft={onUpdateFanDraft} />);
+    fireEvent.change(screen.getByLabelText(/elevation rule/i), { target: { value: "parabolic" } });
+    expect(onUpdateFanDraft).toHaveBeenCalledWith({ elevationMode: "parabolic" });
+  });
+
+  it("commits the fan field", () => {
+    const draft = createFanDraft("anchor-1", { kind: "member", memberId: "member-1" }, "sec-rafter");
+    const onCommitFanField = vi.fn();
+    render(
+      <Inspector selected={undefined} sections={sections} fanDraft={draft} onCommitFanField={onCommitFanField} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /commit fan field/i }));
+    expect(onCommitFanField).toHaveBeenCalled();
+  });
+
+  it("cancels the fan preview", () => {
+    const draft = createFanDraft("anchor-1", { kind: "member", memberId: "member-1" }, "sec-rafter");
+    const onCancelFanPreview = vi.fn();
+    render(
+      <Inspector
+        selected={undefined}
+        sections={sections}
+        fanDraft={draft}
+        onCancelFanPreview={onCancelFanPreview}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(onCancelFanPreview).toHaveBeenCalled();
+  });
+});
+
+describe("Inspector fan field editing", () => {
+  const member: SceneObject = {
+    id: "fan-1::rafter::0",
+    kind: "member",
+    role: "fan-rafter",
+    start: { x: 0, y: 0, z: 2700 },
+    end: { x: 1000, y: 0, z: 2400 },
+    sectionId: "sec-rafter",
+    widthMm: 89,
+    heightMm: 38,
+    rollRad: 0,
+  };
+  const sections = [{ id: "sec-rafter", name: "89x38 rafter", widthMm: 89, heightMm: 38 }];
+  const fanField: FanField = {
+    id: "fan-1",
+    sourceAnchorId: "anchor-1",
+    target: { kind: "member", memberId: "member-target" },
+    distribution: { mode: "count", count: 3 },
+    reversed: false,
+    elevationRule: { kind: "linear" },
+    memberTemplate: { sectionId: "sec-rafter", rollRad: 0 },
+    memberIds: ["fan-1::rafter::0", "fan-1::rafter::1", "fan-1::rafter::2"],
+  };
+
+  it("shows the parent fan field's editable fields alongside the selected rafter's own details", () => {
+    render(<Inspector selected={member} sections={sections} fanFieldForSelected={fanField} />);
+    expect(screen.getByText("fan-1")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /delete fan field/i })).toBeInTheDocument();
+  });
+
+  it("commits an updated distribution count for the whole field", () => {
+    const onUpdateFanField = vi.fn();
+    render(
+      <Inspector
+        selected={member}
+        sections={sections}
+        fanFieldForSelected={fanField}
+        onUpdateFanField={onUpdateFanField}
+      />,
+    );
+    const countField = screen.getByLabelText(/count/i);
+    fireEvent.change(countField, { target: { value: "6" } });
+    fireEvent.blur(countField);
+    expect(onUpdateFanField).toHaveBeenCalledWith("fan-1", { distribution: { mode: "count", count: 6 } });
+  });
+
+  it("deletes the fan field", () => {
+    const onDeleteFanField = vi.fn();
+    render(
+      <Inspector
+        selected={member}
+        sections={sections}
+        fanFieldForSelected={fanField}
+        onDeleteFanField={onDeleteFanField}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /delete fan field/i }));
+    expect(onDeleteFanField).toHaveBeenCalledWith("fan-1");
+  });
+
+  it("does not show the fan field panel for a plain beam", () => {
+    const beam: SceneObject = { ...member, id: "member-plain", role: "perimeter-beam" };
+    render(<Inspector selected={beam} sections={sections} fanFieldForSelected={null} />);
+    expect(screen.queryByRole("button", { name: /delete fan field/i })).not.toBeInTheDocument();
   });
 });
 

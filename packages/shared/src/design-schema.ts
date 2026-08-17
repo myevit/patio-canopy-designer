@@ -13,7 +13,7 @@ const Vector3MmSchema = z.object({
   z: finiteNumber,
 });
 
-const AnchorKindSchema = z.enum(["post-base", "post-top", "house", "free"]);
+const AnchorKindSchema = z.enum(["post-base", "post-top", "house", "fan-target", "free"]);
 
 const AnchorSchema = z.object({
   id: z.string().min(1),
@@ -54,14 +54,36 @@ const MemberSchema = z.object({
   rollRad: finiteNumber,
 });
 
+const FanTargetSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("member"), memberId: z.string().min(1) }),
+  z.object({
+    kind: z.literal("edge"),
+    startAnchorId: z.string().min(1),
+    endAnchorId: z.string().min(1),
+  }),
+]);
+
+const FanDistributionSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("count"), count: z.number().int().min(2) }),
+  z.object({ mode: z.literal("spacing"), spacingMm: finiteNumber.positive() }),
+]);
+
+const FanElevationRuleSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("linear") }),
+  z.object({ kind: z.literal("parabolic"), sagMm: finiteNumber }),
+]);
+
 const FanFieldSchema = z.object({
   id: z.string().min(1),
   sourceAnchorId: z.string().min(1),
-  targetAnchorIds: z.array(z.string().min(1)).min(1),
-  elevationRule: z.string().min(1),
+  target: FanTargetSchema,
+  distribution: FanDistributionSchema,
+  reversed: z.boolean(),
+  elevationRule: FanElevationRuleSchema,
   memberTemplate: z.object({
     sectionId: z.string().min(1),
     materialId: z.string().min(1).optional(),
+    rollRad: finiteNumber,
   }),
   memberIds: z.array(z.string().min(1)),
 });
@@ -299,9 +321,12 @@ export const ProjectDocumentSchema = z
 
     doc.fanFields.forEach((fanField, index) => {
       requireAnchor(fanField.sourceAnchorId, ["fanFields", index, "sourceAnchorId"]);
-      fanField.targetAnchorIds.forEach((id, targetIndex) => {
-        requireAnchor(id, ["fanFields", index, "targetAnchorIds", targetIndex]);
-      });
+      if (fanField.target.kind === "member") {
+        requireMember(fanField.target.memberId, ["fanFields", index, "target", "memberId"]);
+      } else {
+        requireAnchor(fanField.target.startAnchorId, ["fanFields", index, "target", "startAnchorId"]);
+        requireAnchor(fanField.target.endAnchorId, ["fanFields", index, "target", "endAnchorId"]);
+      }
       requireSection(fanField.memberTemplate.sectionId, [
         "fanFields",
         index,
@@ -334,6 +359,9 @@ export type Post = z.infer<typeof PostSchema>;
 export type Member = z.infer<typeof MemberSchema>;
 export type MemberRole = z.infer<typeof MemberRoleSchema>;
 export type FanField = z.infer<typeof FanFieldSchema>;
+export type FanTarget = z.infer<typeof FanTargetSchema>;
+export type FanDistribution = z.infer<typeof FanDistributionSchema>;
+export type FanElevationRule = z.infer<typeof FanElevationRuleSchema>;
 export type Joint = z.infer<typeof JointSchema>;
 export type HouseOutline = z.infer<typeof HouseOutlineSchema>;
 export type RoofPlane = z.infer<typeof RoofPlaneSchema>;

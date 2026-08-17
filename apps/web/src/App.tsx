@@ -5,9 +5,11 @@ import {
   DEFAULT_POST_SECTION_ID,
   SAMPLE_PROJECT,
   createEmptyProjectDocument,
+  deriveFanFieldGeometry,
   exportProjectDocument,
   importProjectDocument,
   type DocumentCommand,
+  type FanTarget,
   type Section,
   type Vector3Mm,
 } from "@canopy/shared";
@@ -16,6 +18,7 @@ import {
   Inspector,
   type BeamPatch,
   type CommandOutcome,
+  type FanFieldPatch,
   type GutterPatch,
   type PostPatch,
   type RoofPlanePatch,
@@ -31,6 +34,7 @@ import type { PersistenceAdapter } from "./persistence/persistence-adapter.js";
 import { useProjectPersistence } from "./persistence/use-project-persistence.js";
 import { distance2D } from "./scene/geometry-helpers.js";
 import { findSceneObject } from "./scene/scene-selectors.js";
+import { createFanDraft, fanDraftDistribution, fanDraftElevationRule, type FanDraft } from "./state/fan-draft.js";
 import type { SelectedVertex } from "./state/selected-vertex.js";
 import { initialStudioState, studioReducer } from "./state/studio-store.js";
 import { useDocumentController } from "./state/use-document-controller.js";
@@ -162,6 +166,36 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
     if (!roofPlaneForSelected) return null;
     return scene.gutters.find((gutter) => gutter.roofPlaneId === roofPlaneForSelected.id) ?? null;
   }, [scene, roofPlaneForSelected]);
+
+  const fanFieldForSelected = useMemo(() => {
+    if (!state.selectedObjectId) return null;
+    return (
+      documentController.document.fanFields.find((f) => f.memberIds.includes(state.selectedObjectId!)) ?? null
+    );
+  }, [documentController.document, state.selectedObjectId]);
+
+  const fanDraft = state.interaction.status === "previewing-fan" ? state.interaction.draft : null;
+
+  const fanPreview = useMemo(() => {
+    if (!fanDraft) return null;
+    const anchorsById = new Map(documentController.document.anchors.map((a) => [a.id, a]));
+    const membersById = new Map(documentController.document.members.map((m) => [m.id, m]));
+    const source = anchorsById.get(fanDraft.sourceAnchorId);
+    if (!source) return null;
+    const geometry = deriveFanFieldGeometry(
+      {
+        sourceAnchorId: fanDraft.sourceAnchorId,
+        target: fanDraft.target,
+        distribution: fanDraftDistribution(fanDraft),
+        reversed: fanDraft.reversed,
+        elevationRule: fanDraftElevationRule(fanDraft),
+      },
+      anchorsById,
+      membersById,
+    );
+    if (!geometry.ok) return null;
+    return { source: source.positionMm, points: geometry.points };
+  }, [fanDraft, documentController.document]);
 
   function handleMoveVertex(vertex: SelectedVertex, position: { x: number; y: number; z: number }): CommandOutcome {
     const result = dispatchGatedCommand({
@@ -346,6 +380,86 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
     }
   }
 
+  function buildDefaultFanDraft(sourceAnchorId: string, target: FanTarget): FanDraft {
+    const sectionId = resolveDefaultSectionId(documentController.document.sections, DEFAULT_BEAM_SECTION_ID);
+    return createFanDraft(sourceAnchorId, target, sectionId);
+  }
+
+  function handleChooseFanAnchor(anchorId: string) {
+    if (state.interaction.status !== "drawing-fan") return;
+    const { sourceAnchorId, pendingEdgeStartAnchorId } = state.interaction;
+    if (sourceAnchorId === null) {
+      dispatch({ type: "set-fan-source-anchor", anchorId });
+      return;
+    }
+    if (pendingEdgeStartAnchorId === null) {
+      if (anchorId === sourceAnchorId) return;
+      dispatch({ type: "set-fan-edge-pending-anchor", anchorId });
+      return;
+    }
+    if (anchorId === pendingEdgeStartAnchorId) return;
+    const draft = buildDefaultFanDraft(sourceAnchorId, {
+      kind: "edge",
+      startAnchorId: pendingEdgeStartAnchorId,
+      endAnchorId: anchorId,
+    });
+    dispatch({ type: "start-fan-preview", draft });
+  }
+
+  function handleChooseFanTargetMember(memberId: string) {
+    if (state.interaction.status !== "drawing-fan" || state.interaction.sourceAnchorId === null) return;
+    const draft = buildDefaultFanDraft(state.interaction.sourceAnchorId, { kind: "member", memberId });
+    dispatch({ type: "start-fan-preview", draft });
+  }
+
+  function handleUpdateFanDraft(patch: Partial<FanDraft>) {
+    dispatch({ type: "update-fan-draft", patch });
+  }
+
+  function handleCancelFanPreview() {
+    dispatch({ type: "cancel-fan-preview" });
+  }
+
+  function handleCommitFanField() {
+    if (state.interaction.status !== "previewing-fan") return;
+    const draft = state.interaction.draft;
+    const result = dispatchGatedCommand({
+      type: "add-fan-field",
+      fanFieldId: nextId("fan-field"),
+      sourceAnchorId: draft.sourceAnchorId,
+      target: draft.target,
+      distribution: fanDraftDistribution(draft),
+      reversed: draft.reversed,
+      elevationRule: fanDraftElevationRule(draft),
+      memberTemplate: { sectionId: draft.sectionId },
+    });
+    if (result.ok) {
+      dispatch({ type: "select-tool", tool: "select" });
+    } else {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+  }
+
+  function handleUpdateFanField(fanFieldId: string, patch: FanFieldPatch): CommandOutcome {
+    const result = dispatchGatedCommand({ type: "update-fan-field", fanFieldId, patch });
+    if (!result.ok) {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+    return result;
+  }
+
+  function handleDeleteFanField(fanFieldId: string) {
+    const fanField = documentController.document.fanFields.find((f) => f.id === fanFieldId);
+    const result = dispatchGatedCommand({ type: "delete-fan-field", fanFieldId });
+    if (result.ok) {
+      if (fanField && state.selectedObjectId && fanField.memberIds.includes(state.selectedObjectId)) {
+        dispatch({ type: "select-object", objectId: null });
+      }
+    } else {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+  }
+
   function handleDeleteSelectedObject(objectId: string) {
     const object = findSceneObject(scene, objectId);
     if (object?.kind === "post") {
@@ -429,6 +543,9 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
               beamStartAnchorId={state.interaction.status === "drawing-beam" ? state.interaction.startAnchorId : null}
               onChooseBeamAnchor={handleChooseBeamAnchor}
               onCreateHouseAnchorOnGutter={handleCreateHouseAnchorOnGutter}
+              onChooseFanAnchor={handleChooseFanAnchor}
+              onChooseFanTargetMember={handleChooseFanTargetMember}
+              fanPreview={fanPreview}
             />
           )}
           {showThree && (
@@ -438,6 +555,8 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
               onSelect={(objectId) => dispatch({ type: "select-object", objectId })}
               tool={state.tool}
               onChooseBeamAnchor={handleChooseBeamAnchor}
+              onChooseFanAnchor={handleChooseFanAnchor}
+              onChooseFanTargetMember={handleChooseFanTargetMember}
             />
           )}
         </main>
@@ -465,6 +584,13 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
           onDeletePost={handleDeletePost}
           onUpdateBeam={handleUpdateBeam}
           onDeleteBeam={handleDeleteBeam}
+          fanDraft={fanDraft}
+          onUpdateFanDraft={handleUpdateFanDraft}
+          onCommitFanField={handleCommitFanField}
+          onCancelFanPreview={handleCancelFanPreview}
+          fanFieldForSelected={fanFieldForSelected}
+          onUpdateFanField={handleUpdateFanField}
+          onDeleteFanField={handleDeleteFanField}
         />
       </div>
 

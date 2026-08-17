@@ -48,6 +48,9 @@ export interface PlanViewProps {
   beamStartAnchorId?: string | null;
   onChooseBeamAnchor?: (anchorId: string) => void;
   onCreateHouseAnchorOnGutter?: (gutterId: string, position: Vector3Mm) => void;
+  onChooseFanAnchor?: (anchorId: string) => void;
+  onChooseFanTargetMember?: (memberId: string) => void;
+  fanPreview?: { source: Vector3Mm; points: Vector3Mm[] } | null;
 }
 
 export function PlanView({
@@ -67,6 +70,9 @@ export function PlanView({
   beamStartAnchorId = null,
   onChooseBeamAnchor = () => {},
   onCreateHouseAnchorOnGutter = () => {},
+  onChooseFanAnchor = () => {},
+  onChooseFanTargetMember = () => {},
+  fanPreview = null,
 }: PlanViewProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [dragPreview, setDragPreview] = useState<{ vertex: SelectedVertex; position: Vector3Mm } | null>(null);
@@ -379,9 +385,15 @@ export function PlanView({
           aria-label={`Member ${member.id}`}
           onClick={(event) => {
             event.stopPropagation();
-            onSelect(member.id);
+            if (tool === "fan") {
+              onChooseFanTargetMember(member.id);
+            } else {
+              onSelect(member.id);
+            }
           }}
-          onKeyDown={(event) => handleSelectionKey(event, member.id, onSelect)}
+          onKeyDown={(event) =>
+            handleSelectionKey(event, member.id, tool === "fan" ? onChooseFanTargetMember : onSelect)
+          }
         />
       ))}
       {scene.posts.map((post) => {
@@ -408,6 +420,8 @@ export function PlanView({
               event.stopPropagation();
               if (tool === "beam") {
                 onChooseBeamAnchor(post.topAnchorId);
+              } else if (tool === "fan") {
+                onChooseFanAnchor(post.topAnchorId);
               } else {
                 onSelect(post.id);
               }
@@ -415,6 +429,8 @@ export function PlanView({
             onKeyDown={(event) => {
               if (tool === "beam") {
                 handleSelectionKey(event, post.topAnchorId, onChooseBeamAnchor);
+              } else if (tool === "fan") {
+                handleSelectionKey(event, post.topAnchorId, onChooseFanAnchor);
               } else {
                 handleSelectionKey(event, post.id, onSelect);
               }
@@ -440,10 +456,13 @@ export function PlanView({
             event.stopPropagation();
             if (tool === "beam") {
               onChooseBeamAnchor(anchor.id);
+            } else if (tool === "fan") {
+              onChooseFanAnchor(anchor.id);
             }
           }}
           onKeyDown={(event) => {
             if (tool === "beam") handleSelectionKey(event, anchor.id, onChooseBeamAnchor);
+            else if (tool === "fan") handleSelectionKey(event, anchor.id, onChooseFanAnchor);
           }}
         />
       ))}
@@ -484,6 +503,21 @@ export function PlanView({
           y2={beamPreview.end.y}
           pointerEvents="none"
         />
+      )}
+      {fanPreview && (
+        <g className="plan-view__fan-preview" pointerEvents="none">
+          {fanPreview.points.map((point, index) => (
+            <line
+              key={index}
+              data-testid={`fan-preview-line-${index}`}
+              className="plan-view__fan-preview-line"
+              x1={fanPreview.source.x}
+              y1={fanPreview.source.y}
+              x2={point.x}
+              y2={point.y}
+            />
+          ))}
+        </g>
       )}
       {tool === "post" && postPlacementPreview && (
         <circle
