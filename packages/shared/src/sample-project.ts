@@ -84,6 +84,12 @@ const document: ProjectDocument = {
     { id: "anchor-p4-top", kind: "post-top", positionMm: { x: 6300, y: 4200, z: 2330 } },
     { id: "anchor-p5-base", kind: "post-base", positionMm: { x: 7600, y: 3000, z: 0 } },
     { id: "anchor-p5-top", kind: "post-top", positionMm: { x: 7600, y: 3000, z: 2400 } },
+
+    // Derived fan-target anchors for the two fields' middle rafters (index 1 of
+    // 3): the ruled surface midpoint between the target edge's endpoints, not
+    // any post — the ends (index 0/2) legitimately coincide with post tops.
+    { id: "anchor-fan-a-mid", kind: "fan-target", positionMm: { x: 3550, y: 4350, z: 2325 }, sourceRef: "fan-field-a" },
+    { id: "anchor-fan-b-mid", kind: "fan-target", positionMm: { x: 5100, y: 3775, z: 2350 }, sourceRef: "fan-field-b" },
   ],
   sections: [
     { id: "sec-post", name: "140x140 post", widthMm: 140, heightMm: 140 },
@@ -187,7 +193,7 @@ const document: ProjectDocument = {
       id: "member-fan-a-2",
       role: "fan-rafter",
       startAnchorId: "anchor-ha2",
-      endAnchorId: "anchor-p3-top",
+      endAnchorId: "anchor-fan-a-mid",
       sectionId: "sec-rafter",
       materialId: "mat-1",
       rollRad: 0,
@@ -214,7 +220,7 @@ const document: ProjectDocument = {
       id: "member-fan-b-2",
       role: "fan-rafter",
       startAnchorId: "anchor-ha3",
-      endAnchorId: "anchor-p4-top",
+      endAnchorId: "anchor-fan-b-mid",
       sectionId: "sec-rafter",
       materialId: "mat-1",
       rollRad: 0,

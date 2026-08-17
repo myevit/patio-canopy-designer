@@ -336,6 +336,9 @@ describe("parseProjectDocument", () => {
 
   it("accepts a fan field with a parabolic elevation rule and a spacing distribution", () => {
     const doc = withFanFieldFixtures(minimalDocument());
+    // reversed:true puts index 0 at t=1 (the target's far end), where the
+    // parabolic sag term is zero — so rafter-1 must land on edge-end.
+    doc.members[0]!.endAnchorId = "edge-end";
     doc.fanFields.push({
       id: "fan-1",
       sourceAnchorId: "source-1",
@@ -348,6 +351,59 @@ describe("parseProjectDocument", () => {
     });
     const result = parseProjectDocument(doc);
     expect(result.success).toBe(true);
+  });
+
+  it("rejects a fan field member whose endpoint does not match its derived target position (stale or hand-edited)", () => {
+    const doc = withFanFieldFixtures(minimalDocument());
+    doc.anchors.push({ id: "wrong-spot", kind: "free", positionMm: { x: 9999, y: 9999, z: 9999 } });
+    doc.members[0]!.endAnchorId = "wrong-spot";
+    doc.fanFields.push({
+      id: "fan-1",
+      sourceAnchorId: "source-1",
+      target: { kind: "edge", startAnchorId: "edge-start", endAnchorId: "edge-end" },
+      distribution: { mode: "count", count: 3 },
+      reversed: false,
+      elevationRule: { kind: "linear" },
+      memberTemplate: { sectionId: "sec-rafter", rollRad: 0 },
+      memberIds: ["rafter-1"],
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a fan field whose memberIds entry has the wrong role, even though it exists and is at the right position", () => {
+    const doc = withFanFieldFixtures(minimalDocument());
+    doc.members[0]!.role = "perimeter-beam";
+    doc.fanFields.push({
+      id: "fan-1",
+      sourceAnchorId: "source-1",
+      target: { kind: "edge", startAnchorId: "edge-start", endAnchorId: "edge-end" },
+      distribution: { mode: "count", count: 3 },
+      reversed: false,
+      elevationRule: { kind: "linear" },
+      memberTemplate: { sectionId: "sec-rafter", rollRad: 0 },
+      memberIds: ["rafter-1"],
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a fan field whose member starts at a different anchor than the field's source", () => {
+    const doc = withFanFieldFixtures(minimalDocument());
+    doc.anchors.push({ id: "other-source", kind: "house", positionMm: { x: 100, y: 100, z: 2700 } });
+    doc.members[0]!.startAnchorId = "other-source";
+    doc.fanFields.push({
+      id: "fan-1",
+      sourceAnchorId: "source-1",
+      target: { kind: "edge", startAnchorId: "edge-start", endAnchorId: "edge-end" },
+      distribution: { mode: "count", count: 3 },
+      reversed: false,
+      elevationRule: { kind: "linear" },
+      memberTemplate: { sectionId: "sec-rafter", rollRad: 0 },
+      memberIds: ["rafter-1"],
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(false);
   });
 
   it("rejects a fan field referencing an unknown source anchor", () => {

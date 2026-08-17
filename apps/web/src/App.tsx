@@ -460,12 +460,25 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
     }
   }
 
+  function handleDeleteJoint(jointId: string) {
+    const result = dispatchGatedCommand({ type: "delete-joint", jointId });
+    if (result.ok) {
+      if (state.selectedObjectId === jointId) {
+        dispatch({ type: "select-object", objectId: null });
+      }
+    } else {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+  }
+
   function handleDeleteSelectedObject(objectId: string) {
     const object = findSceneObject(scene, objectId);
     if (object?.kind === "post") {
       handleDeletePost(objectId);
     } else if (object?.kind === "member") {
       handleDeleteBeam(objectId);
+    } else if (object?.kind === "joint") {
+      handleDeleteJoint(objectId);
     }
   }
 
@@ -591,6 +604,7 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
           fanFieldForSelected={fanFieldForSelected}
           onUpdateFanField={handleUpdateFanField}
           onDeleteFanField={handleDeleteFanField}
+          onDeleteJoint={handleDeleteJoint}
         />
       </div>
 

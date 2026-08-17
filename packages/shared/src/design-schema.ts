@@ -1,5 +1,22 @@
 import { z } from "zod";
+import { deriveFanFieldTargetPositions } from "./fan-field-geometry.js";
 import { validateOutline } from "./outline-validation.js";
+import type { Vector3Mm } from "./units.js";
+
+/**
+ * Fan-rafter endpoints are recomputed with plain double-precision arithmetic
+ * on every regeneration; a round-trip through JSON preserves full precision,
+ * so any drift beyond float noise means the document is stale or hand-edited.
+ */
+const FAN_FIELD_POSITION_TOLERANCE_MM = 1e-6;
+
+function positionsWithinTolerance(a: Vector3Mm, b: Vector3Mm, toleranceMm: number): boolean {
+  return (
+    Math.abs(a.x - b.x) <= toleranceMm &&
+    Math.abs(a.y - b.y) <= toleranceMm &&
+    Math.abs(a.z - b.z) <= toleranceMm
+  );
+}
 
 export const CURRENT_SCHEMA_VERSION = 1 as const;
 
@@ -284,6 +301,8 @@ export const ProjectDocumentSchema = z
     const sectionIds = new Set(doc.sections.map((s) => s.id));
     const materialIds = new Set(doc.materials.map((m) => m.id));
     const memberIds = new Set(doc.members.map((m) => m.id));
+    const anchorsById = new Map(doc.anchors.map((a) => [a.id, a]));
+    const membersById = new Map(doc.members.map((m) => [m.id, m]));
 
     const requireAnchor = (id: string, path: (string | number)[]) => {
       if (!anchorIds.has(id)) {
@@ -342,6 +361,69 @@ export const ProjectDocumentSchema = z
       fanField.memberIds.forEach((id, memberIndex) => {
         requireMember(id, ["fanFields", index, "memberIds", memberIndex]);
       });
+
+      // Cross-check derived state: each listed member must actually be the
+      // fan-rafter this field's current params would produce, so imported or
+      // hand-edited documents can't carry stale/inconsistent geometry.
+      const sourceAnchor = anchorsById.get(fanField.sourceAnchorId);
+      let targetStart: Vector3Mm | undefined;
+      let targetEnd: Vector3Mm | undefined;
+      if (fanField.target.kind === "member") {
+        const targetMember = membersById.get(fanField.target.memberId);
+        targetStart = targetMember ? anchorsById.get(targetMember.startAnchorId)?.positionMm : undefined;
+        targetEnd = targetMember ? anchorsById.get(targetMember.endAnchorId)?.positionMm : undefined;
+      } else {
+        targetStart = anchorsById.get(fanField.target.startAnchorId)?.positionMm;
+        targetEnd = anchorsById.get(fanField.target.endAnchorId)?.positionMm;
+      }
+
+      if (sourceAnchor && targetStart && targetEnd) {
+        const derived = deriveFanFieldTargetPositions({
+          sourcePosition: sourceAnchor.positionMm,
+          targetStart,
+          targetEnd,
+          distribution: fanField.distribution,
+          reversed: fanField.reversed,
+          elevationRule: fanField.elevationRule,
+        });
+        if (derived.ok) {
+          fanField.memberIds.forEach((id, memberIndex) => {
+            const member = membersById.get(id);
+            if (!member) return; // already reported by requireMember above
+            const expectedEnd = derived.points[memberIndex];
+            if (!expectedEnd) {
+              ctx.addIssue({
+                code: "custom",
+                message: `Fan field ${fanField.id} member ${id} has no corresponding derived position for index ${memberIndex}.`,
+                path: ["fanFields", index, "memberIds", memberIndex],
+              });
+              return;
+            }
+            if (member.role !== "fan-rafter") {
+              ctx.addIssue({
+                code: "custom",
+                message: `Fan field ${fanField.id} member ${id} must have role "fan-rafter".`,
+                path: ["fanFields", index, "memberIds", memberIndex],
+              });
+            }
+            if (member.startAnchorId !== fanField.sourceAnchorId) {
+              ctx.addIssue({
+                code: "custom",
+                message: `Fan field ${fanField.id} member ${id} does not start at the field's source anchor.`,
+                path: ["fanFields", index, "memberIds", memberIndex],
+              });
+            }
+            const actualEnd = anchorsById.get(member.endAnchorId)?.positionMm;
+            if (!actualEnd || !positionsWithinTolerance(actualEnd, expectedEnd, FAN_FIELD_POSITION_TOLERANCE_MM)) {
+              ctx.addIssue({
+                code: "custom",
+                message: `Fan field ${fanField.id} member ${id} endpoint does not match its derived target position.`,
+                path: ["fanFields", index, "memberIds", memberIndex],
+              });
+            }
+          });
+        }
+      }
     });
 
     doc.joints.forEach((joint, index) => {

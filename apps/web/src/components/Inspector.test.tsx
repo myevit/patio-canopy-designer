@@ -59,6 +59,19 @@ describe("Inspector", () => {
     expect(screen.getByText(/member-1/)).toBeInTheDocument();
     expect(screen.getByText(/member-2/)).toBeInTheDocument();
   });
+
+  it("deletes the selected joint", () => {
+    const joint: SceneObject = {
+      id: "joint-1",
+      kind: "joint",
+      position: { x: 1, y: 2, z: 3 },
+      connectedMemberIds: ["member-1", "member-2"],
+    };
+    const onDeleteJoint = vi.fn();
+    render(<Inspector selected={joint} onDeleteJoint={onDeleteJoint} />);
+    fireEvent.click(screen.getByRole("button", { name: /delete joint/i }));
+    expect(onDeleteJoint).toHaveBeenCalledWith("joint-1");
+  });
 });
 
 describe("Inspector post editing", () => {
@@ -308,6 +321,22 @@ describe("Inspector fan field editing", () => {
     const beam: SceneObject = { ...member, id: "member-plain", role: "perimeter-beam" };
     render(<Inspector selected={beam} sections={sections} fanFieldForSelected={null} />);
     expect(screen.queryByRole("button", { name: /delete fan field/i })).not.toBeInTheDocument();
+  });
+
+  it("hides the generic section/orientation controls and delete-beam button for a derived rafter", () => {
+    render(<Inspector selected={member} sections={sections} fanFieldForSelected={fanField} />);
+    // Only the fan field's own Section control should remain, not the generic member one.
+    expect(screen.getAllByLabelText(/^section$/i)).toHaveLength(1);
+    expect(screen.queryByLabelText(/orientation/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^delete beam$/i })).not.toBeInTheDocument();
+  });
+
+  it("still shows the generic section/orientation controls and delete-beam button for a plain beam", () => {
+    const beam: SceneObject = { ...member, id: "member-plain", role: "perimeter-beam" };
+    render(<Inspector selected={beam} sections={sections} fanFieldForSelected={null} />);
+    expect(screen.getByLabelText(/^section$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/orientation/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^delete beam$/i })).toBeInTheDocument();
   });
 });
 

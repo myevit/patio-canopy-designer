@@ -418,6 +418,17 @@ describe("App: posts and beams", () => {
 
     expect(screen.queryByTestId(beamTestId)).not.toBeInTheDocument();
   });
+
+  it("blocks deleting a joint that connects a fan field rafter, surfacing a friendly status message", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const joint = screen.getByTestId("scene-object-joint-crossing-1");
+    await user.click(joint);
+    await user.click(screen.getByRole("button", { name: /delete joint/i }));
+
+    expect(screen.getByTestId("scene-object-joint-crossing-1")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/fan field/i);
+  });
 });
 
 describe("App: fan fields", () => {

@@ -460,6 +460,7 @@ export interface InspectorProps {
   fanFieldForSelected?: FanField | null;
   onUpdateFanField?: (fanFieldId: string, patch: FanFieldPatch) => CommandOutcome;
   onDeleteFanField?: (fanFieldId: string) => void;
+  onDeleteJoint?: (jointId: string) => void;
 }
 
 export function Inspector({
@@ -493,6 +494,7 @@ export function Inspector({
   fanFieldForSelected = null,
   onUpdateFanField = () => ({ ok: true }),
   onDeleteFanField = () => {},
+  onDeleteJoint = () => {},
 }: InspectorProps) {
   if (selectedVertex && vertexOutline) {
     const point = vertexOutline.points[selectedVertex.index];
@@ -656,21 +658,25 @@ export function Inspector({
             <dt>End</dt>
             <dd>{formatPoint(selected.end)}</dd>
           </dl>
-          {sections.length > 0 && (
-            <SectionField
-              sections={sections}
-              sectionId={selected.sectionId}
-              onCommit={(sectionId) => onUpdateBeam(selected.id, { sectionId })}
-            />
+          {!fanFieldForSelected && (
+            <>
+              {sections.length > 0 && (
+                <SectionField
+                  sections={sections}
+                  sectionId={selected.sectionId}
+                  onCommit={(sectionId) => onUpdateBeam(selected.id, { sectionId })}
+                />
+              )}
+              <NumberField
+                label="Orientation (degrees)"
+                value={formatDegrees(selected.rollRad)}
+                onCommit={(rollDeg) => onUpdateBeam(selected.id, { rollRad: (rollDeg * Math.PI) / 180 })}
+              />
+              <button type="button" onClick={() => onDeleteBeam(selected.id)}>
+                Delete beam
+              </button>
+            </>
           )}
-          <NumberField
-            label="Orientation (degrees)"
-            value={formatDegrees(selected.rollRad)}
-            onCommit={(rollDeg) => onUpdateBeam(selected.id, { rollRad: (rollDeg * Math.PI) / 180 })}
-          />
-          <button type="button" onClick={() => onDeleteBeam(selected.id)}>
-            Delete beam
-          </button>
           {fanFieldForSelected && (
             <FanFieldEditPanel
               fanField={fanFieldForSelected}
@@ -682,16 +688,21 @@ export function Inspector({
         </>
       )}
       {selected?.kind === "joint" && (
-        <dl>
-          <dt>Object</dt>
-          <dd>Joint</dd>
-          <dt>ID</dt>
-          <dd>{selected.id}</dd>
-          <dt>Position</dt>
-          <dd>{formatPoint(selected.position)}</dd>
-          <dt>Connected members</dt>
-          <dd>{selected.connectedMemberIds.join(", ")}</dd>
-        </dl>
+        <>
+          <dl>
+            <dt>Object</dt>
+            <dd>Joint</dd>
+            <dt>ID</dt>
+            <dd>{selected.id}</dd>
+            <dt>Position</dt>
+            <dd>{formatPoint(selected.position)}</dd>
+            <dt>Connected members</dt>
+            <dd>{selected.connectedMemberIds.join(", ")}</dd>
+          </dl>
+          <button type="button" onClick={() => onDeleteJoint(selected.id)}>
+            Delete joint
+          </button>
+        </>
       )}
     </aside>
   );

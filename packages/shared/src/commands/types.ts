@@ -94,7 +94,8 @@ export type DocumentCommand =
         memberTemplate: FanMemberTemplatePatch;
       }>;
     }
-  | { type: "delete-fan-field"; fanFieldId: string };
+  | { type: "delete-fan-field"; fanFieldId: string }
+  | { type: "delete-joint"; jointId: string };
 
 export type CommandResult =
   | { ok: true; document: ProjectDocument }

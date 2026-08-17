@@ -641,6 +641,145 @@ describe("applyCommand: beams", () => {
     });
     const result = applyCommand(doc, { type: "delete-beam", memberId: "member-1" });
     expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/joint-1/);
+      expect(result.error).not.toMatch(/unknown member id/i);
+    }
+  });
+});
+
+describe("applyCommand: delete-post friendly joint block", () => {
+  function withPostAndBeam(): ProjectDocument {
+    const doc = baseDoc();
+    doc.sections.push({ id: "sec-post", name: "Post", widthMm: 140, heightMm: 140 });
+    doc.sections.push({ id: "sec-beam", name: "Beam", widthMm: 184, heightMm: 38 });
+    const withPost = applyCommand(doc, {
+      type: "add-post",
+      postId: "post-1",
+      baseAnchorId: "anchor-base-1",
+      topAnchorId: "anchor-top-1",
+      sectionId: "sec-post",
+      heightMm: 2400,
+      position: { x: 0, y: 0, z: 0 },
+    });
+    if (!withPost.ok) throw new Error("setup failed");
+    const withOtherAnchor = applyCommand(withPost.document, {
+      type: "add-house-anchor",
+      anchorId: "anchor-other",
+      position: { x: 1000, y: 0, z: 2400 },
+    });
+    if (!withOtherAnchor.ok) throw new Error("setup failed");
+    const withBeam = applyCommand(withOtherAnchor.document, {
+      type: "add-beam",
+      memberId: "member-1",
+      startAnchorId: "anchor-top-1",
+      endAnchorId: "anchor-other",
+      sectionId: "sec-beam",
+    });
+    if (!withBeam.ok) throw new Error("setup failed");
+    return withBeam.document;
+  }
+
+  it("blocks deleting a post whose beam is still referenced by a joint, with a clear reason", () => {
+    const doc = withPostAndBeam();
+    doc.joints.push({
+      id: "joint-1",
+      connectedMemberIds: ["member-1"],
+      positionMm: { x: 500, y: 0, z: 2400 },
+      crossingBehavior: "unresolved",
+      engineeringStatus: "engineer-review-required",
+    });
+    const snapshot = JSON.parse(JSON.stringify(doc));
+    const result = applyCommand(doc, { type: "delete-post", postId: "post-1" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/joint-1/);
+      expect(result.error).not.toMatch(/unknown/i);
+    }
+    expect(doc).toEqual(snapshot);
+  });
+
+  it("still deletes a post whose beam is not referenced by any joint", () => {
+    const doc = withPostAndBeam();
+    const result = applyCommand(doc, { type: "delete-post", postId: "post-1" });
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe("applyCommand: delete-joint", () => {
+  function withBeamAndJoint(): ProjectDocument {
+    const doc = baseDoc();
+    doc.sections.push({ id: "sec-beam", name: "Beam", widthMm: 184, heightMm: 38 });
+    doc.anchors.push(
+      { id: "a-1", kind: "free", positionMm: { x: 0, y: 0, z: 2400 } },
+      { id: "a-2", kind: "free", positionMm: { x: 1000, y: 0, z: 2400 } },
+    );
+    doc.members.push({
+      id: "member-1",
+      role: "perimeter-beam",
+      startAnchorId: "a-1",
+      endAnchorId: "a-2",
+      sectionId: "sec-beam",
+      rollRad: 0,
+    });
+    doc.joints.push({
+      id: "joint-1",
+      connectedMemberIds: ["member-1"],
+      positionMm: { x: 500, y: 0, z: 2400 },
+      crossingBehavior: "unresolved",
+      engineeringStatus: "engineer-review-required",
+    });
+    return doc;
+  }
+
+  it("deletes a joint that connects ordinary beams", () => {
+    const doc = withBeamAndJoint();
+    const result = applyCommand(doc, { type: "delete-joint", jointId: "joint-1" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.joints).toHaveLength(0);
+      expect(result.document.members).toHaveLength(1);
+    }
+  });
+
+  it("rejects deleting an unknown joint", () => {
+    const doc = withBeamAndJoint();
+    const result = applyCommand(doc, { type: "delete-joint", jointId: "missing" });
+    expect(result.ok).toBe(false);
+  });
+
+  it("protects a joint that connects a fan field's derived rafter", () => {
+    const doc = baseDoc();
+    doc.sections.push({ id: "sec-rafter", name: "Rafter", widthMm: 89, heightMm: 38 });
+    doc.anchors.push(
+      { id: "source-1", kind: "house", positionMm: { x: 0, y: 0, z: 2700 } },
+      { id: "edge-start", kind: "post-top", positionMm: { x: 0, y: 4000, z: 2300 } },
+      { id: "edge-end", kind: "post-top", positionMm: { x: 4000, y: 4000, z: 2300 } },
+    );
+    const withField = applyCommand(doc, {
+      type: "add-fan-field",
+      fanFieldId: "fan-1",
+      sourceAnchorId: "source-1",
+      target: { kind: "edge", startAnchorId: "edge-start", endAnchorId: "edge-end" },
+      distribution: { mode: "count", count: 3 },
+      reversed: false,
+      elevationRule: { kind: "linear" },
+      memberTemplate: { sectionId: "sec-rafter" },
+    });
+    if (!withField.ok) throw new Error("setup failed");
+    const fieldDoc = withField.document;
+    fieldDoc.joints.push({
+      id: "joint-1",
+      connectedMemberIds: [fieldDoc.fanFields[0]!.memberIds[0]!],
+      positionMm: { x: 0, y: 4000, z: 2300 },
+      crossingBehavior: "unresolved",
+      engineeringStatus: "engineer-review-required",
+    });
+    const result = applyCommand(fieldDoc, { type: "delete-joint", jointId: "joint-1" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/fan field/i);
+    }
   });
 });
 
@@ -781,23 +920,45 @@ describe("applyCommand: fan fields", () => {
     expect(doc).toEqual(snapshot);
   });
 
-  it("blocks regeneration that would orphan a joint referencing a derived rafter", () => {
+  it("blocks regeneration that would orphan a joint referencing a derived rafter, with an explicit recoverable reason instead of a raw schema error", () => {
     const doc = withField();
     // Regenerating with fewer members drops the highest-index derived rafter
     // (ids are stable by index, so shrinking the count is what orphans it).
+    const droppedMemberId = doc.fanFields[0]!.memberIds[2]!;
     doc.joints.push({
       id: "joint-1",
-      connectedMemberIds: [doc.fanFields[0]!.memberIds[2]!],
+      connectedMemberIds: [droppedMemberId],
       positionMm: { x: 0, y: 4000, z: 2300 },
       crossingBehavior: "unresolved",
       engineeringStatus: "engineer-review-required",
     });
+    const snapshot = JSON.parse(JSON.stringify(doc));
     const result = applyCommand(doc, {
       type: "update-fan-field",
       fanFieldId: "fan-1",
       patch: { distribution: { mode: "count", count: 2 } },
     });
     expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/joint-1/);
+      expect(result.error).toContain(droppedMemberId);
+      expect(result.error).not.toMatch(/unknown member id/i);
+    }
+    expect(doc).toEqual(snapshot);
+  });
+
+  it("does not block growing a fan field's count, and surviving indices keep their stable ids", () => {
+    const doc = withField();
+    const originalMemberIds = doc.fanFields[0]!.memberIds;
+    const result = applyCommand(doc, {
+      type: "update-fan-field",
+      fanFieldId: "fan-1",
+      patch: { distribution: { mode: "count", count: 5 } },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.fanFields[0]!.memberIds.slice(0, 3)).toEqual(originalMemberIds);
+    }
   });
 
   it("rejects updating an unknown fan field", () => {
@@ -828,6 +989,10 @@ describe("applyCommand: fan fields", () => {
     });
     const result = applyCommand(doc, { type: "delete-fan-field", fanFieldId: "fan-1" });
     expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/joint-1/);
+      expect(result.error).not.toMatch(/unknown member id/i);
+    }
   });
 
   it("rejects deleting an unknown fan field", () => {
@@ -841,7 +1006,24 @@ describe("applyCommand: fan fields", () => {
     const memberId = doc.fanFields[0]!.memberIds[0]!;
     const result = applyCommand(doc, { type: "delete-beam", memberId });
     expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/fan field/i);
+      expect(result.error).not.toMatch(/unknown member id/i);
+    }
   });
+
+  it("blocks a direct update-beam on a derived rafter with a clear, recoverable reason", () => {
+    const doc = withField();
+    const memberId = doc.fanFields[0]!.memberIds[0]!;
+    const snapshot = JSON.parse(JSON.stringify(doc));
+    const result = applyCommand(doc, { type: "update-beam", memberId, patch: { rollRad: 0.3 } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/fan field/i);
+    }
+    expect(doc).toEqual(snapshot);
+  });
+
 });
 
 describe("applyCommand: update-gutter", () => {
