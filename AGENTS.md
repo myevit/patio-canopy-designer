@@ -9,8 +9,8 @@ interactive 3D designer. There is no backend, no authentication, no cloud
 SDK, no telemetry, and no deployment infrastructure. All project data lives
 in the browser and is exported/imported as versioned JSON.
 
-The authoritative task breakdown lives in
-`docs/plans/2026-08-16-project-scaffold.md`. Read the current plan before
+The authoritative delivery plan lives in
+`docs/plans/2026-08-16-canopy-studio-delivery.md`. Read the current plan before
 starting work and implement only the task you were assigned.
 
 ## Architecture boundaries
@@ -30,8 +30,13 @@ starting work and implement only the task you were assigned.
   loaded.
 - Structural output is preliminary planning information, not professional
   engineering approval — this must stay visible in the UI copy.
-- Calculations use SI units internally; display-unit conversion happens only
-  at system boundaries (UI input/output).
+- Canonical geometry uses explicit SI millimetres and internal angles use
+  radians; display-unit conversion happens only at system boundaries.
+- The canonical document stores semantic objects and stable IDs, never
+  Three.js meshes, triangle indices, display coordinates, or WASM handles.
+- Geometry validity, structural analysis, code checks, professional review,
+  and permit status are separate states. Never collapse them into a global
+  `safe`, `approved`, or `permit ready` result.
 
 ## No-cloud / no-secret rules
 

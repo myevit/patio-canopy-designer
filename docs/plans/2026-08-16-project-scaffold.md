@@ -1,5 +1,8 @@
 # Local-First Patio Canopy Designer Scaffold Implementation Plan
 
+> **Superseded:** Task 1 of this scaffold was completed. Ongoing delivery is
+> governed by `docs/plans/2026-08-16-canopy-studio-delivery.md`.
+
 > **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task.
 
 **Goal:** Establish a tested, local-first TypeScript monorepo for a patio-canopy calculator and interactive 3D designer.
