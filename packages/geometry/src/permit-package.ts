@@ -39,6 +39,15 @@ export const PERMIT_PACKAGE_DISCLAIMER =
  * screening passes - this banner is unconditional, not derived from any
  * per-member status.
  */
+/**
+ * Compact single-line form of `PERMIT_PACKAGE_DISCLAIMER` for print contexts
+ * - a footer on every drawing sheet - where the full paragraph would not fit.
+ * Fixed and unconditional for the same reason as the full disclaimer: no
+ * consumer can omit or reword it.
+ */
+export const PERMIT_PACKAGE_SHEET_DISCLAIMER =
+  "Not a permit approval - no code-compliance claim - no professional (APEGA) stamp applied or implied.";
+
 export const SADDLE_ENGINEER_REVIEW_BANNER =
   "The attached irregular saddle (the fan-rafter lattice attached to the house) always requires engineer " +
   "review before construction, regardless of any component screening status below. Component screening never " +
@@ -145,6 +154,8 @@ export interface PermitPackageTitleBlock {
 export interface PermitPackage {
   titleBlock: PermitPackageTitleBlock;
   disclaimer: string;
+  /** Compact single-line form of `disclaimer`, meant to be printed as a footer on every drawing sheet. */
+  sheetFooterDisclaimer: string;
   sitePlan: PermitSitePlanSheet;
   drawingSheets: BlueprintSheetSet;
   footingLayout: PermitFootingLayoutSheet;
@@ -306,6 +317,7 @@ export function buildPermitPackage(document: ProjectDocument, options: PermitPac
       sheetCount: PERMIT_SHEET_COUNT,
     },
     disclaimer: PERMIT_PACKAGE_DISCLAIMER,
+    sheetFooterDisclaimer: PERMIT_PACKAGE_SHEET_DISCLAIMER,
     sitePlan: buildSitePlan(document, options),
     drawingSheets: buildBlueprintSheetSet(document, { generatedAt: options.generatedAt, displayUnits }),
     footingLayout: buildFootingLayout(document),

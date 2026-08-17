@@ -1,6 +1,6 @@
 import { buildPermitPackage } from "@canopy/geometry";
 import { CURRENT_SCHEMA_VERSION, type ProjectDocument } from "@canopy/shared";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { PermitPrintPackage } from "./PermitPrintPackage.js";
 
@@ -84,5 +84,17 @@ describe("PermitPrintPackage", () => {
     const pkg = buildPermitPackage(document, { generatedAt: "2026-08-17T00:00:00.000Z" });
     render(<PermitPrintPackage pkg={pkg} document={document} />);
     expect(screen.getByTestId("blueprint-print-package")).toBeInTheDocument();
+  });
+
+  it("puts the no-approval disclaimer on every printed drawing sheet, not just the summary page", () => {
+    const document = twoPostFrame();
+    const pkg = buildPermitPackage(document, { generatedAt: "2026-08-17T00:00:00.000Z" });
+    render(<PermitPrintPackage pkg={pkg} document={document} />);
+    const drawingsPage = screen.getByTestId("permit-print-page-drawings");
+    const footers = within(drawingsPage).getAllByTestId("blueprint-sheet-permit-disclaimer");
+    expect(footers.length).toBe(pkg.drawingSheets.sheets.length);
+    for (const footer of footers) {
+      expect(footer).toHaveTextContent(/not a permit approval/i);
+    }
   });
 });

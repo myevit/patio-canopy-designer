@@ -94,6 +94,17 @@ export function PermitPackagePanel({
               className={`permit-package-panel__footprint permit-package-panel__footprint--${footprint.kind}`}
             />
           ))}
+          <g
+            data-testid="permit-site-plan-north-arrow"
+            className="permit-package-panel__north-arrow"
+            transform="translate(4700, -5300)"
+          >
+            <line x1={0} y1={0} x2={0} y2={650} className="permit-package-panel__north-arrow-shaft" />
+            <polygon points="-100,520 100,520 0,750" className="permit-package-panel__north-arrow-head" />
+            <text x={0} y={-40} textAnchor="middle" className="permit-package-panel__north-arrow-label">
+              N
+            </text>
+          </g>
         </svg>
         <p>{pkg.sitePlan.northArrowNote}</p>
         <p>{pkg.sitePlan.propertyLineNote}</p>

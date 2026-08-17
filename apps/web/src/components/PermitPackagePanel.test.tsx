@@ -1,6 +1,6 @@
 import type { MemberAnalysisReport, PostAnalysisReport } from "@canopy/calculations";
 import { CURRENT_SCHEMA_VERSION, type ProjectDocument } from "@canopy/shared";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { PermitPackagePanel } from "./PermitPackagePanel.js";
@@ -111,6 +111,14 @@ describe("PermitPackagePanel", () => {
     renderPanel();
     expect(screen.getByTestId("permit-footing-post-a")).toBeInTheDocument();
     expect(screen.getByTestId("permit-footing-post-b")).toBeInTheDocument();
+  });
+
+  it("draws a north arrow graphic (not just a textual note) on the site plan sheet", () => {
+    renderPanel();
+    const siteFieldset = screen.getByRole("group", { name: /site plan draft/i });
+    const northArrow = within(siteFieldset).getByTestId("permit-site-plan-north-arrow");
+    expect(within(northArrow).getByText("N")).toBeInTheDocument();
+    expect(northArrow.querySelector("polygon, path")).not.toBeNull();
   });
 
   it("marks address as not provided until the user enters one", async () => {

@@ -110,7 +110,7 @@ export function PermitPrintPackage({ pkg, document }: PermitPrintPackageProps) {
         </ul>
       </div>
       <div className="permit-print-package__page" data-testid="permit-print-page-drawings" data-page-break="before">
-        <BlueprintPrintPackage sheetSet={pkg.drawingSheets} />
+        <BlueprintPrintPackage sheetSet={pkg.drawingSheets} permitDisclaimer={pkg.sheetFooterDisclaimer} />
       </div>
     </div>
   );

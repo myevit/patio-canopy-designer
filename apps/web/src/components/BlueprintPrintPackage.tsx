@@ -3,6 +3,8 @@ import { BlueprintSheetSvg } from "./BlueprintSheetSvg.js";
 
 export interface BlueprintPrintPackageProps {
   sheetSet: BlueprintSheetSet;
+  /** When supplied, threaded onto every sheet as a compact footer line - lets a permit-package print context put its no-approval disclaimer on every sheet without this component knowing about permits. */
+  permitDisclaimer?: string;
 }
 
 /**
@@ -13,7 +15,7 @@ export interface BlueprintPrintPackageProps {
  * no page ever gets a page-break-after, so the package prints with exactly
  * one break between sheets and no trailing blank page.
  */
-export function BlueprintPrintPackage({ sheetSet }: BlueprintPrintPackageProps) {
+export function BlueprintPrintPackage({ sheetSet, permitDisclaimer }: BlueprintPrintPackageProps) {
   return (
     <div className="blueprint-print-package" data-testid="blueprint-print-package" aria-hidden="true">
       {sheetSet.sheets.map((sheet, index) => (
@@ -23,7 +25,7 @@ export function BlueprintPrintPackage({ sheetSet }: BlueprintPrintPackageProps) 
           data-testid={`blueprint-print-page-${sheet.titleBlock.sheetNumber}`}
           data-page-break={index === 0 ? "start" : "before"}
         >
-          <BlueprintSheetSvg sheet={sheet} mode="print" />
+          <BlueprintSheetSvg sheet={sheet} mode="print" permitDisclaimer={permitDisclaimer} />
         </div>
       ))}
     </div>

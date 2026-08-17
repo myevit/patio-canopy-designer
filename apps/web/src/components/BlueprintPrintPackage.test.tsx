@@ -49,4 +49,17 @@ describe("BlueprintPrintPackage", () => {
     render(<BlueprintPrintPackage sheetSet={sheetSet()} />);
     expect(screen.getByTestId("blueprint-print-package")).toHaveAttribute("aria-hidden", "true");
   });
+
+  it("renders no permit disclaimer footer by default, since a plain blueprint print is not a permit document", () => {
+    render(<BlueprintPrintPackage sheetSet={sheetSet()} />);
+    expect(screen.queryByTestId("blueprint-sheet-permit-disclaimer")).not.toBeInTheDocument();
+  });
+
+  it("renders the permit disclaimer footer on every sheet page when supplied", () => {
+    render(<BlueprintPrintPackage sheetSet={sheetSet()} permitDisclaimer="Not a permit approval - no code-compliance claim." />);
+    for (const pageNumber of [1, 2]) {
+      const page = screen.getByTestId(`blueprint-print-page-${pageNumber}`);
+      expect(within(page).getByTestId("blueprint-sheet-permit-disclaimer")).toHaveTextContent(/not a permit approval/i);
+    }
+  });
 });

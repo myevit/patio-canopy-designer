@@ -14,10 +14,17 @@ export interface BlueprintSheetSvgProps {
   pageSize?: { widthMm: number; heightMm: number };
   /** "screen" (default) shows the sheet's computed scale for reference; "print" replaces it with an honest, paper-independent label. */
   mode?: "screen" | "print";
+  /** When supplied, rendered as a compact footer line in the title block - lets a permit-package print context put its no-approval disclaimer on every sheet without this component knowing about permits. */
+  permitDisclaimer?: string;
 }
 
 /** Renders one already-laid-out blueprint sheet - a plain visualization of validated, projected geometry, no numbers re-entered by hand. */
-export function BlueprintSheetSvg({ sheet, pageSize = A3_LANDSCAPE_MM, mode = "screen" }: BlueprintSheetSvgProps) {
+export function BlueprintSheetSvg({
+  sheet,
+  pageSize = A3_LANDSCAPE_MM,
+  mode = "screen",
+  permitDisclaimer,
+}: BlueprintSheetSvgProps) {
   const { titleBlock } = sheet;
   const titleBlockHeightMm = DEFAULT_PAGE_LAYOUT.titleBlockHeightMm;
   const contentHeightMm = pageSize.heightMm - titleBlockHeightMm;
@@ -136,6 +143,11 @@ export function BlueprintSheetSvg({ sheet, pageSize = A3_LANDSCAPE_MM, mode = "s
         {mode === "print" && (
           <p data-testid="blueprint-print-scale-footnote" className="blueprint-sheet__print-footnote">
             {PRINT_SCALE_FOOTNOTE}
+          </p>
+        )}
+        {permitDisclaimer && (
+          <p data-testid="blueprint-sheet-permit-disclaimer" className="blueprint-sheet__permit-disclaimer">
+            {permitDisclaimer}
           </p>
         )}
       </div>

@@ -96,4 +96,15 @@ describe("BlueprintSheetSvg", () => {
     expect(scale).not.toHaveTextContent("1:20");
     expect(screen.getByTestId("blueprint-print-scale-footnote")).toHaveTextContent(/not guaranteed/i);
   });
+
+  it("renders no permit disclaimer footer by default, since a plain blueprint sheet is not a permit document", () => {
+    render(<BlueprintSheetSvg sheet={drawingSheet()} mode="print" />);
+    expect(screen.queryByTestId("blueprint-sheet-permit-disclaimer")).not.toBeInTheDocument();
+  });
+
+  it("renders a compact permit disclaimer footer alongside the print footnote when one is supplied", () => {
+    render(<BlueprintSheetSvg sheet={drawingSheet()} mode="print" permitDisclaimer="Not a permit approval - no code-compliance claim." />);
+    expect(screen.getByTestId("blueprint-sheet-permit-disclaimer")).toHaveTextContent(/not a permit approval/i);
+    expect(screen.getByTestId("blueprint-print-scale-footnote")).toBeInTheDocument();
+  });
 });

@@ -362,6 +362,28 @@ body {
   color: #566370;
 }
 
+.blueprint-sheet__permit-disclaimer {
+  margin: 0.25rem 0 0;
+  font-size: 3px;
+  font-weight: 600;
+  color: #566370;
+}
+
+.permit-package-panel__north-arrow-shaft {
+  stroke: #566370;
+  stroke-width: 40;
+}
+
+.permit-package-panel__north-arrow-head {
+  fill: #566370;
+}
+
+.permit-package-panel__north-arrow-label {
+  font-size: 260px;
+  font-weight: 700;
+  fill: #566370;
+}
+
 /* Print-only duplicate of every sheet (see BlueprintPrintPackage); hidden on
    screen, shown only under @media print so a single Print click emits the
    full package, not just the sheet in the on-screen preview. */

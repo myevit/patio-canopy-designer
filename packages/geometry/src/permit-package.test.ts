@@ -5,6 +5,7 @@ import { buildBlueprintSheetSet } from "./blueprint-sheet.js";
 import { buildMemberSchedule } from "./member-schedule.js";
 import {
   PERMIT_PACKAGE_DISCLAIMER,
+  PERMIT_PACKAGE_SHEET_DISCLAIMER,
   SADDLE_ENGINEER_REVIEW_BANNER,
   buildPermitPackage,
 } from "./permit-package.js";
@@ -112,6 +113,13 @@ describe("buildPermitPackage", () => {
       expect(pkg.structuralSummary.saddleEngineerReviewBanner).toBe(SADDLE_ENGINEER_REVIEW_BANNER);
       expect(pkg.structuralSummary.saddleEngineerReviewBanner).toMatch(/engineer review/i);
       expect(pkg.structuralSummary.saddleEngineerReviewBanner).not.toMatch(/\bis approved\b/i);
+    });
+
+    it("also carries a compact single-line form of the disclaimer, for print contexts that can't fit the full paragraph on every sheet", () => {
+      const pkg = buildPermitPackage(baseDoc(), { generatedAt: GENERATED_AT });
+      expect(pkg.sheetFooterDisclaimer).toBe(PERMIT_PACKAGE_SHEET_DISCLAIMER);
+      expect(pkg.sheetFooterDisclaimer).toMatch(/not a permit approval/i);
+      expect(pkg.sheetFooterDisclaimer.length).toBeLessThan(PERMIT_PACKAGE_DISCLAIMER.length);
     });
   });
 

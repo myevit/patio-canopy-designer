@@ -57,6 +57,11 @@ test("assembles a permit-assist package that stays consistent with the BOM and a
   // The engineer-review-required banner for the attached irregular saddle is always shown.
   await expect(permitPanel.getByText(/attached irregular saddle/i).first()).toBeVisible();
 
+  // The site plan sheet draws an actual north arrow graphic, not just a textual note.
+  const northArrow = permitPanel.getByTestId("permit-site-plan-north-arrow");
+  await expect(northArrow).toBeVisible();
+  await expect(northArrow.getByText("N")).toBeVisible();
+
   // Cross-sheet consistency: the member schedule in the permit package lists
   // exactly the same member the BOM tab lists, and the structural summary
   // lists every drawn member/post, none silently dropped.
@@ -101,7 +106,17 @@ test("assembles a permit-assist package that stays consistent with the BOM and a
   const printPackage = permitPanel.getByTestId("permit-print-package");
   await expect(printPackage).toBeAttached();
   await expect(permitPanel.getByTestId("permit-print-page-summary")).toContainText(/not a permit approval/i);
-  await expect(permitPanel.getByTestId("permit-print-page-drawings").getByTestId("blueprint-print-package")).toBeAttached();
+  const drawingsPage = permitPanel.getByTestId("permit-print-page-drawings");
+  await expect(drawingsPage.getByTestId("blueprint-print-package")).toBeAttached();
+
+  // The disclaimer is present on every printed page, including the drawings/blueprint
+  // sheets - not just the summary page - as a compact per-sheet footer line.
+  const sheetCount = await drawingsPage.getByTestId("blueprint-title-block").count();
+  const sheetDisclaimerFooters = drawingsPage.getByTestId("blueprint-sheet-permit-disclaimer");
+  expect(await sheetDisclaimerFooters.count()).toBe(sheetCount);
+  for (const footer of await sheetDisclaimerFooters.all()) {
+    await expect(footer).toContainText(/not a permit approval/i);
+  }
 
   // Under real print media, the screen content hides and the print package shows.
   await page.emulateMedia({ media: "print" });
