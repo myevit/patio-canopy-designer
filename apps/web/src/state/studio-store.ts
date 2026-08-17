@@ -24,6 +24,7 @@ export type StudioAction =
   | { type: "remove-last-outline-point" }
   | { type: "set-outline-error"; error: string | undefined }
   | { type: "set-interaction"; interaction: InteractionState }
+  | { type: "set-beam-start-anchor"; anchorId: string | null }
   | { type: "set-view-mode"; viewMode: ViewMode }
   | { type: "set-drawer-tab"; tab: DrawerTab }
   | { type: "toggle-drawer" }
@@ -49,6 +50,7 @@ function interactionForTool(tool: ToolId): InteractionState {
     case "joint":
       return { status: "placing" };
     case "beam":
+      return { status: "drawing-beam", startAnchorId: null };
     case "fan":
       return { status: "drawing" };
   }
@@ -112,6 +114,10 @@ export function studioReducer(state: StudioState, action: StudioAction): StudioS
     }
     case "set-interaction":
       return { ...state, interaction: action.interaction };
+    case "set-beam-start-anchor": {
+      if (state.interaction.status !== "drawing-beam") return state;
+      return { ...state, interaction: { status: "drawing-beam", startAnchorId: action.anchorId } };
+    }
     case "set-view-mode":
       return { ...state, viewMode: action.viewMode };
     case "set-drawer-tab":

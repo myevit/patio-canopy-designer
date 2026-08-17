@@ -18,10 +18,10 @@ describe("studioReducer", () => {
     expect(next.interaction).toEqual({ status: "placing" });
   });
 
-  it("switches to the Beam tool and enters a drawing interaction", () => {
+  it("switches to the Beam tool and enters a drawing-beam interaction awaiting a start anchor", () => {
     const next = studioReducer(initialStudioState, { type: "select-tool", tool: "beam" });
     expect(next.tool).toBe("beam");
-    expect(next.interaction).toEqual({ status: "drawing" });
+    expect(next.interaction).toEqual({ status: "drawing-beam", startAnchorId: null });
   });
 
   it("returns to idle when the Select tool is chosen again", () => {
@@ -121,6 +121,34 @@ describe("studioReducer: house outline drawing", () => {
     const next = studioReducer(state, { type: "escape" });
     expect(next.interaction).toEqual({ status: "idle" });
     expect(next.tool).toBe("select");
+  });
+});
+
+describe("studioReducer: beam drawing", () => {
+  it("sets the beam start anchor when a start anchor is chosen", () => {
+    const drawing = studioReducer(initialStudioState, { type: "select-tool", tool: "beam" });
+    const next = studioReducer(drawing, { type: "set-beam-start-anchor", anchorId: "anchor-1" });
+    expect(next.interaction).toEqual({ status: "drawing-beam", startAnchorId: "anchor-1" });
+  });
+
+  it("resets the beam start anchor back to null (e.g. after a beam commits) to draw the next one", () => {
+    const drawing = studioReducer(initialStudioState, { type: "select-tool", tool: "beam" });
+    const started = studioReducer(drawing, { type: "set-beam-start-anchor", anchorId: "anchor-1" });
+    const next = studioReducer(started, { type: "set-beam-start-anchor", anchorId: null });
+    expect(next.interaction).toEqual({ status: "drawing-beam", startAnchorId: null });
+  });
+
+  it("ignores set-beam-start-anchor when not in the drawing-beam interaction", () => {
+    const next = studioReducer(initialStudioState, { type: "set-beam-start-anchor", anchorId: "anchor-1" });
+    expect(next).toEqual(initialStudioState);
+  });
+
+  it("escape cancels the in-progress beam entirely, returning to the Select tool", () => {
+    const drawing = studioReducer(initialStudioState, { type: "select-tool", tool: "beam" });
+    const started = studioReducer(drawing, { type: "set-beam-start-anchor", anchorId: "anchor-1" });
+    const next = studioReducer(started, { type: "escape" });
+    expect(next.tool).toBe("select");
+    expect(next.interaction).toEqual({ status: "idle" });
   });
 });
 

@@ -95,12 +95,21 @@ describe("buildScene", () => {
       kind: "post",
       base: { x: 10, y: 20, z: 0 },
       top: { x: 10, y: 20, z: 2400 },
+      baseAnchorId: "a-base",
+      topAnchorId: "a-top",
       widthMm: 140,
       depthMm: 140,
     });
   });
 
-  it("resolves a member's start/end anchors, role, and section dimensions", () => {
+  it("exposes house-kind anchors as selectable house anchors in the scene", () => {
+    const scene = buildScene(fixtureDocument());
+    expect(scene.houseAnchors).toEqual([
+      { id: "a-start", kind: "house-anchor", position: { x: 0, y: 0, z: 2700 } },
+    ]);
+  });
+
+  it("resolves a member's start/end anchors, role, section dimensions, and roll", () => {
     const scene = buildScene(fixtureDocument());
     expect(scene.members).toHaveLength(1);
     const [member] = scene.members;
@@ -112,6 +121,7 @@ describe("buildScene", () => {
       end: { x: 10, y: 20, z: 2400 },
       widthMm: 184,
       heightMm: 38,
+      rollRad: 0,
     });
   });
 

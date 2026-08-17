@@ -5,6 +5,7 @@ import { Canvas, type ThreeEvent } from "@react-three/fiber";
 import type { SceneGutter, SceneRoofPlane, ScenePrimitives } from "@canopy/geometry";
 import { memberTransform, toThreeVector, wallTransform } from "../scene/three-transforms.js";
 import { triangulateFootprint } from "../scene/triangulate-polygon.js";
+import type { ToolId } from "../state/tool.js";
 
 function RoofPlaneMesh({ roofPlane }: { roofPlane: SceneRoofPlane }) {
   const geometry = useMemo(() => {
@@ -48,6 +49,8 @@ export interface ThreeViewProps {
   scene: ScenePrimitives;
   selectedObjectId: string | null;
   onSelect: (id: string) => void;
+  tool?: ToolId;
+  onChooseBeamAnchor?: (anchorId: string) => void;
 }
 
 function handleClick(event: ThreeEvent<MouseEvent>, id: string, onSelect: (id: string) => void) {
@@ -55,8 +58,22 @@ function handleClick(event: ThreeEvent<MouseEvent>, id: string, onSelect: (id: s
   onSelect(id);
 }
 
-export function ThreeView({ scene, selectedObjectId, onSelect }: ThreeViewProps) {
+export function ThreeView({
+  scene,
+  selectedObjectId,
+  onSelect,
+  tool = "select",
+  onChooseBeamAnchor = () => {},
+}: ThreeViewProps) {
   const selectableObjects = [...scene.posts, ...scene.members, ...scene.joints];
+  function handlePostClick(event: ThreeEvent<MouseEvent>, postId: string, topAnchorId: string) {
+    event.stopPropagation();
+    if (tool === "beam") {
+      onChooseBeamAnchor(topAnchorId);
+    } else {
+      onSelect(postId);
+    }
+  }
 
   return (
     <>
@@ -100,13 +117,29 @@ export function ThreeView({ scene, selectedObjectId, onSelect }: ThreeViewProps)
             userData={{ sourceObjectId: post.id, selected }}
             position={transform.center}
             quaternion={transform.quaternion}
-            onClick={(event) => handleClick(event, post.id, onSelect)}
+            onClick={(event) => handlePostClick(event, post.id, post.topAnchorId)}
           >
             <boxGeometry args={[post.widthMm, transform.length, post.depthMm]} />
             <meshStandardMaterial color={selected ? "#f2a600" : "#8a6d3b"} />
           </mesh>
         );
       })}
+
+      {scene.houseAnchors.map((anchor) => (
+        <mesh
+          key={anchor.id}
+          data-testid={`scene-object-${anchor.id}`}
+          name={anchor.id}
+          position={toThreeVector(anchor.position)}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (tool === "beam") onChooseBeamAnchor(anchor.id);
+          }}
+        >
+          <boxGeometry args={[60, 60, 60]} />
+          <meshStandardMaterial color="#3f7fc3" />
+        </mesh>
+      ))}
 
       {scene.members.map((member) => {
         const transform = memberTransform(member.start, member.end);
@@ -151,7 +184,13 @@ export function ThreeView({ scene, selectedObjectId, onSelect }: ThreeViewProps)
             type="button"
             aria-label={`Select ${object.id} in 3D scene`}
             aria-pressed={object.id === selectedObjectId}
-            onClick={() => onSelect(object.id)}
+            onClick={() => {
+              if (tool === "beam" && object.kind === "post") {
+                onChooseBeamAnchor(object.topAnchorId);
+              } else {
+                onSelect(object.id);
+              }
+            }}
           >
             {object.id}
           </button>

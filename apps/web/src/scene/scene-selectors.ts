@@ -1,4 +1,5 @@
 import type { SceneObject, ScenePrimitives } from "@canopy/geometry";
+import type { Vector3Mm } from "@canopy/shared";
 
 export interface SelectableSceneObject {
   id: string;
@@ -43,4 +44,15 @@ export function findSceneObject(
     scene.joints.find((joint) => joint.id === id) ??
     scene.houseOutlines.find((outline) => outline.id === id)
   );
+}
+
+/** Resolves a beam-connectable anchor id (a post's top/base anchor, or a house anchor) to its position. */
+export function resolveAnchorPosition(
+  scene: ScenePrimitives,
+  anchorId: string | null | undefined,
+): Vector3Mm | undefined {
+  if (!anchorId) return undefined;
+  const post = scene.posts.find((p) => p.topAnchorId === anchorId || p.baseAnchorId === anchorId);
+  if (post) return post.topAnchorId === anchorId ? post.top : post.base;
+  return scene.houseAnchors.find((anchor) => anchor.id === anchorId)?.position;
 }

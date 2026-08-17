@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { SceneGutter, SceneObject, SceneRoofPlane } from "@canopy/geometry";
-import type { Vector3Mm } from "@canopy/shared";
+import type { Section, Vector3Mm } from "@canopy/shared";
 import type { SelectedVertex } from "../state/selected-vertex.js";
 
 const MEMBER_ROLE_LABELS: Record<string, string> = {
@@ -85,6 +85,28 @@ function NumberField({ label, value, onCommit }: NumberFieldProps) {
   );
 }
 
+interface SectionSelectProps {
+  sections: Section[];
+  value: string;
+  onCommit: (sectionId: string) => void;
+}
+
+function SectionSelect({ sections, value, onCommit }: SectionSelectProps) {
+  const id = useId();
+  return (
+    <p className="inspector__field">
+      <label htmlFor={id}>Section</label>
+      <select id={id} value={value} onChange={(event) => onCommit(event.target.value)}>
+        {sections.map((section) => (
+          <option key={section.id} value={section.id}>
+            {section.name}
+          </option>
+        ))}
+      </select>
+    </p>
+  );
+}
+
 interface HouseDrawingPanelProps {
   points: Vector3Mm[];
   onAddPoint: (point: Vector3Mm) => void;
@@ -140,6 +162,16 @@ function formatDegrees(radians: number): number {
   return Number(((radians * 180) / Math.PI).toFixed(4));
 }
 
+export interface PostPatch {
+  heightMm?: number;
+  sectionId?: string;
+}
+
+export interface BeamPatch {
+  sectionId?: string;
+  rollRad?: number;
+}
+
 export interface InspectorProps {
   selected: SceneObject | undefined;
   selectedVertex?: SelectedVertex | null;
@@ -147,6 +179,7 @@ export interface InspectorProps {
   roofPlane?: SceneRoofPlane | null;
   gutter?: SceneGutter | null;
   drawingPoints?: Vector3Mm[] | null;
+  sections?: Section[];
   onMoveVertex?: (vertex: SelectedVertex, position: Vector3Mm) => CommandOutcome;
   onDeleteVertex?: (vertex: SelectedVertex) => void;
   onAddRoofPlane?: (houseOutlineId: string) => void;
@@ -155,6 +188,12 @@ export interface InspectorProps {
   onAddDrawingPoint?: (point: Vector3Mm) => void;
   onRemoveLastDrawingPoint?: () => void;
   onCloseDrawing?: () => void;
+  onMovePost?: (postId: string, position: Vector3Mm) => CommandOutcome;
+  onUpdatePost?: (postId: string, patch: PostPatch) => CommandOutcome;
+  onDuplicatePost?: (postId: string) => void;
+  onDeletePost?: (postId: string) => void;
+  onUpdateBeam?: (memberId: string, patch: BeamPatch) => CommandOutcome;
+  onDeleteBeam?: (memberId: string) => void;
 }
 
 export function Inspector({
@@ -164,6 +203,7 @@ export function Inspector({
   roofPlane = null,
   gutter = null,
   drawingPoints = null,
+  sections = [],
   onMoveVertex = () => {},
   onDeleteVertex = () => {},
   onAddRoofPlane = () => {},
@@ -172,6 +212,12 @@ export function Inspector({
   onAddDrawingPoint = () => {},
   onRemoveLastDrawingPoint = () => {},
   onCloseDrawing = () => {},
+  onMovePost = () => {},
+  onUpdatePost = () => {},
+  onDuplicatePost = () => {},
+  onDeletePost = () => {},
+  onUpdateBeam = () => {},
+  onDeleteBeam = () => {},
 }: InspectorProps) {
   if (selectedVertex && vertexOutline) {
     const point = vertexOutline.points[selectedVertex.index];
@@ -270,36 +316,80 @@ export function Inspector({
         </>
       )}
       {selected?.kind === "post" && (
-        <dl>
-          <dt>Object</dt>
-          <dd>Post</dd>
-          <dt>ID</dt>
-          <dd>{selected.id}</dd>
-          <dt>Base</dt>
-          <dd>{formatPoint(selected.base)}</dd>
-          <dt>Top</dt>
-          <dd>{formatPoint(selected.top)}</dd>
-          <dt>Section</dt>
-          <dd>
-            {selected.widthMm} mm x {selected.depthMm} mm
-          </dd>
-        </dl>
+        <>
+          <dl>
+            <dt>Object</dt>
+            <dd>Post</dd>
+            <dt>ID</dt>
+            <dd>{selected.id}</dd>
+            <dt>Top</dt>
+            <dd>{formatPoint(selected.top)}</dd>
+            <dt>Section</dt>
+            <dd>
+              {selected.widthMm} mm x {selected.depthMm} mm
+            </dd>
+          </dl>
+          <NumberField
+            label="Base X (mm)"
+            value={selected.base.x}
+            onCommit={(x) => onMovePost(selected.id, { ...selected.base, x })}
+          />
+          <NumberField
+            label="Base Y (mm)"
+            value={selected.base.y}
+            onCommit={(y) => onMovePost(selected.id, { ...selected.base, y })}
+          />
+          <NumberField
+            label="Height (mm)"
+            value={selected.top.z - selected.base.z}
+            onCommit={(heightMm) => onUpdatePost(selected.id, { heightMm })}
+          />
+          {sections.length > 0 && (
+            <SectionSelect
+              sections={sections}
+              value={sections.find((s) => s.widthMm === selected.widthMm && s.heightMm === selected.depthMm)?.id ?? sections[0]!.id}
+              onCommit={(sectionId) => onUpdatePost(selected.id, { sectionId })}
+            />
+          )}
+          <button type="button" onClick={() => onDuplicatePost(selected.id)}>
+            Duplicate post
+          </button>
+          <button type="button" onClick={() => onDeletePost(selected.id)}>
+            Delete post
+          </button>
+        </>
       )}
       {selected?.kind === "member" && (
-        <dl>
-          <dt>Object</dt>
-          <dd>{MEMBER_ROLE_LABELS[selected.role] ?? "Member"}</dd>
-          <dt>ID</dt>
-          <dd>{selected.id}</dd>
-          <dt>Start</dt>
-          <dd>{formatPoint(selected.start)}</dd>
-          <dt>End</dt>
-          <dd>{formatPoint(selected.end)}</dd>
-          <dt>Section</dt>
-          <dd>
-            {selected.widthMm} mm x {selected.heightMm} mm
-          </dd>
-        </dl>
+        <>
+          <dl>
+            <dt>Object</dt>
+            <dd>{MEMBER_ROLE_LABELS[selected.role] ?? "Member"}</dd>
+            <dt>ID</dt>
+            <dd>{selected.id}</dd>
+            <dt>Start</dt>
+            <dd>{formatPoint(selected.start)}</dd>
+            <dt>End</dt>
+            <dd>{formatPoint(selected.end)}</dd>
+          </dl>
+          {sections.length > 0 && (
+            <SectionSelect
+              sections={sections}
+              value={
+                sections.find((s) => s.widthMm === selected.widthMm && s.heightMm === selected.heightMm)?.id ??
+                sections[0]!.id
+              }
+              onCommit={(sectionId) => onUpdateBeam(selected.id, { sectionId })}
+            />
+          )}
+          <NumberField
+            label="Orientation (degrees)"
+            value={formatDegrees(selected.rollRad)}
+            onCommit={(rollDeg) => onUpdateBeam(selected.id, { rollRad: (rollDeg * Math.PI) / 180 })}
+          />
+          <button type="button" onClick={() => onDeleteBeam(selected.id)}>
+            Delete beam
+          </button>
+        </>
       )}
       {selected?.kind === "joint" && (
         <dl>

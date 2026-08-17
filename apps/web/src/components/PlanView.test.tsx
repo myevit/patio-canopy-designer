@@ -32,7 +32,16 @@ function scene(): ScenePrimitives {
       },
     ],
     posts: [
-      { id: "post-1", kind: "post", base: { x: 50, y: 400, z: 0 }, top: { x: 50, y: 400, z: 2400 }, widthMm: 140, depthMm: 140 },
+      {
+        id: "post-1",
+        kind: "post",
+        base: { x: 50, y: 400, z: 0 },
+        top: { x: 50, y: 400, z: 2400 },
+        baseAnchorId: "anchor-base",
+        topAnchorId: "anchor-top",
+        widthMm: 140,
+        depthMm: 140,
+      },
     ],
     members: [
       {
@@ -43,10 +52,14 @@ function scene(): ScenePrimitives {
         end: { x: 50, y: 400, z: 2400 },
         widthMm: 89,
         heightMm: 38,
+        rollRad: 0,
       },
     ],
     joints: [
       { id: "joint-1", kind: "joint", position: { x: 25, y: 200, z: 2500 }, connectedMemberIds: ["member-1"] },
+    ],
+    houseAnchors: [
+      { id: "anchor-house-1", kind: "house-anchor", position: { x: 3000, y: -300, z: 2700 } },
     ],
   };
 }
@@ -270,6 +283,189 @@ describe("PlanView vertex editing", () => {
   });
 });
 
+describe("PlanView post placement", () => {
+  function mockRect() {
+    const rect = { left: 0, top: 0, width: 8400, height: 5200 };
+    vi.spyOn(SVGElement.prototype, "getBoundingClientRect").mockReturnValue({
+      ...rect,
+      right: rect.width,
+      bottom: rect.height,
+      x: 0,
+      y: 0,
+      toJSON: () => rect,
+    } as DOMRect);
+  }
+
+  it("shows a snapped placement preview that follows the cursor when the post tool is active", () => {
+    mockRect();
+    render(<PlanView scene={scene()} selectedObjectId={null} onSelect={() => {}} tool="post" />);
+    const svg = screen.getByTestId("plan-view-svg");
+    fireEvent.pointerMove(svg, { clientX: 5640, clientY: 4470 });
+    const preview = screen.getByTestId("post-placement-preview");
+    expect(preview).toHaveAttribute("cx", "5000");
+    expect(preview).toHaveAttribute("cy", "4100");
+  });
+
+  it("does not show a placement preview outside the post tool", () => {
+    mockRect();
+    render(<PlanView scene={scene()} selectedObjectId={null} onSelect={() => {}} tool="select" />);
+    const svg = screen.getByTestId("plan-view-svg");
+    fireEvent.pointerMove(svg, { clientX: 5640, clientY: 4470 });
+    expect(screen.queryByTestId("post-placement-preview")).not.toBeInTheDocument();
+  });
+
+  it("places a post at the snapped position on click", () => {
+    mockRect();
+    const onPlacePost = vi.fn();
+    render(
+      <PlanView scene={scene()} selectedObjectId={null} onSelect={() => {}} tool="post" onPlacePost={onPlacePost} />,
+    );
+    const svg = screen.getByTestId("plan-view-svg");
+    fireEvent.click(svg, { clientX: 5640, clientY: 4470 });
+    expect(onPlacePost).toHaveBeenCalledWith({ x: 5000, y: 4100, z: 0 });
+  });
+
+  it("bypasses snapping for free placement while Shift is held", () => {
+    mockRect();
+    const onPlacePost = vi.fn();
+    render(
+      <PlanView scene={scene()} selectedObjectId={null} onSelect={() => {}} tool="post" onPlacePost={onPlacePost} />,
+    );
+    const svg = screen.getByTestId("plan-view-svg");
+    fireEvent.click(svg, { clientX: 5637, clientY: 4463, shiftKey: true });
+    expect(onPlacePost).toHaveBeenCalledWith({ x: 5037, y: 4063, z: 0 });
+  });
+});
+
+describe("PlanView post dragging", () => {
+  function mockRect() {
+    const rect = { left: 0, top: 0, width: 8400, height: 5200 };
+    vi.spyOn(SVGElement.prototype, "getBoundingClientRect").mockReturnValue({
+      ...rect,
+      right: rect.width,
+      bottom: rect.height,
+      x: 0,
+      y: 0,
+      toJSON: () => rect,
+    } as DOMRect);
+  }
+
+  it("drags a post and commits the move on pointer up while the Select tool is active", () => {
+    mockRect();
+    const onMovePost = vi.fn();
+    render(
+      <PlanView scene={scene()} selectedObjectId={null} onSelect={() => {}} tool="select" onMovePost={onMovePost} />,
+    );
+    const post = screen.getByTestId("scene-object-post-1");
+    fireEvent.pointerDown(post, { clientX: 600, clientY: 400, pointerId: 1 });
+    fireEvent.pointerMove(post, { clientX: 700, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(post, { clientX: 700, clientY: 500, pointerId: 1 });
+    expect(onMovePost).toHaveBeenCalledWith("post-1", { x: 100, y: 100, z: 0 });
+  });
+
+  it("does not drag a post while the Beam tool is active, so clicks can choose it as an anchor instead", () => {
+    mockRect();
+    const onMovePost = vi.fn();
+    const onChooseBeamAnchor = vi.fn();
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="beam"
+        onMovePost={onMovePost}
+        onChooseBeamAnchor={onChooseBeamAnchor}
+      />,
+    );
+    const post = screen.getByTestId("scene-object-post-1");
+    fireEvent.pointerDown(post, { clientX: 600, clientY: 400, pointerId: 1 });
+    fireEvent.pointerMove(post, { clientX: 700, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(post, { clientX: 700, clientY: 500, pointerId: 1 });
+    expect(onMovePost).not.toHaveBeenCalled();
+  });
+});
+
+describe("PlanView beam flow", () => {
+  it("clicking a post while the Beam tool is active chooses its top anchor instead of selecting it", () => {
+    const onSelect = vi.fn();
+    const onChooseBeamAnchor = vi.fn();
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={onSelect}
+        tool="beam"
+        onChooseBeamAnchor={onChooseBeamAnchor}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("scene-object-post-1"));
+    expect(onChooseBeamAnchor).toHaveBeenCalledWith("anchor-top");
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("clicking a house anchor while the Beam tool is active chooses it", () => {
+    const onChooseBeamAnchor = vi.fn();
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="beam"
+        onChooseBeamAnchor={onChooseBeamAnchor}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("scene-object-anchor-house-1"));
+    expect(onChooseBeamAnchor).toHaveBeenCalledWith("anchor-house-1");
+  });
+
+  it("renders a valid preview beam line when hovering a different candidate anchor", () => {
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="beam"
+        beamStartAnchorId="anchor-top"
+      />,
+    );
+    fireEvent.pointerEnter(screen.getByTestId("scene-object-anchor-house-1"));
+    const preview = screen.getByTestId("beam-preview");
+    expect(preview).toHaveAttribute("data-valid", "true");
+  });
+
+  it("renders an invalid preview beam line when hovering the same anchor chosen as the start", () => {
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="beam"
+        beamStartAnchorId="anchor-top"
+      />,
+    );
+    fireEvent.pointerEnter(screen.getByTestId("scene-object-post-1"));
+    const preview = screen.getByTestId("beam-preview");
+    expect(preview).toHaveAttribute("data-valid", "false");
+  });
+
+  it("clears the preview beam line on pointer leave", () => {
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="beam"
+        beamStartAnchorId="anchor-top"
+      />,
+    );
+    const target = screen.getByTestId("scene-object-anchor-house-1");
+    fireEvent.pointerEnter(target);
+    expect(screen.getByTestId("beam-preview")).toBeInTheDocument();
+    fireEvent.pointerLeave(target);
+    expect(screen.queryByTestId("beam-preview")).not.toBeInTheDocument();
+  });
+});
+
 describe("PlanView roof and gutter rendering", () => {
   function sceneWithRoofOverHouse(): ScenePrimitives {
     const base = scene();
@@ -317,5 +513,29 @@ describe("PlanView roof and gutter rendering", () => {
     render(<PlanView scene={sceneWithRoofOverHouse()} selectedObjectId={null} onSelect={() => {}} />);
     const roof = screen.getByTestId("roof-plane-roof-1");
     expect(roof).toHaveStyle({ pointerEvents: "none" });
+  });
+
+  it("clicking a gutter while the Beam tool is active creates a house anchor projected onto it", () => {
+    const rect = { left: 0, top: 0, width: 8400, height: 5200 };
+    vi.spyOn(SVGElement.prototype, "getBoundingClientRect").mockReturnValue({
+      ...rect,
+      right: rect.width,
+      bottom: rect.height,
+      x: 0,
+      y: 0,
+      toJSON: () => rect,
+    } as DOMRect);
+    const onCreateHouseAnchorOnGutter = vi.fn();
+    render(
+      <PlanView
+        scene={sceneWithRoofOverHouse()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="beam"
+        onCreateHouseAnchorOnGutter={onCreateHouseAnchorOnGutter}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("gutter-gutter-1"), { clientX: 650, clientY: 350 });
+    expect(onCreateHouseAnchorOnGutter).toHaveBeenCalledWith("gutter-1", { x: 50, y: -300, z: 2700 });
   });
 });

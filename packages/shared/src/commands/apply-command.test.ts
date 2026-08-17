@@ -286,6 +286,364 @@ describe("applyCommand: roof plane", () => {
   });
 });
 
+describe("applyCommand: posts", () => {
+  function withSection(): ProjectDocument {
+    const doc = baseDoc();
+    doc.sections.push({ id: "sec-post", name: "Post", widthMm: 140, heightMm: 140 });
+    return doc;
+  }
+
+  it("adds a post with fresh base/top anchors at the given position and height", () => {
+    const doc = withSection();
+    const result = applyCommand(doc, {
+      type: "add-post",
+      postId: "post-1",
+      baseAnchorId: "anchor-base-1",
+      topAnchorId: "anchor-top-1",
+      sectionId: "sec-post",
+      heightMm: 2400,
+      position: { x: 1000, y: 2000, z: 0 },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.posts).toHaveLength(1);
+      expect(result.document.posts[0]).toEqual({
+        id: "post-1",
+        baseAnchorId: "anchor-base-1",
+        topAnchorId: "anchor-top-1",
+        sectionId: "sec-post",
+        heightMm: 2400,
+      });
+      const base = result.document.anchors.find((a) => a.id === "anchor-base-1");
+      const top = result.document.anchors.find((a) => a.id === "anchor-top-1");
+      expect(base).toEqual({ id: "anchor-base-1", kind: "post-base", positionMm: { x: 1000, y: 2000, z: 0 } });
+      expect(top).toEqual({ id: "anchor-top-1", kind: "post-top", positionMm: { x: 1000, y: 2000, z: 2400 } });
+    }
+  });
+
+  it("rejects a post referencing an unknown section", () => {
+    const doc = baseDoc();
+    const result = applyCommand(doc, {
+      type: "add-post",
+      postId: "post-1",
+      baseAnchorId: "anchor-base-1",
+      topAnchorId: "anchor-top-1",
+      sectionId: "missing-section",
+      heightMm: 2400,
+      position: { x: 0, y: 0, z: 0 },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  function withPost(): ProjectDocument {
+    const result = applyCommand(withSection(), {
+      type: "add-post",
+      postId: "post-1",
+      baseAnchorId: "anchor-base-1",
+      topAnchorId: "anchor-top-1",
+      sectionId: "sec-post",
+      heightMm: 2400,
+      position: { x: 1000, y: 2000, z: 0 },
+    });
+    if (!result.ok) throw new Error("setup failed");
+    return result.document;
+  }
+
+  it("moves a post by updating its base and top anchor positions, preserving height", () => {
+    const doc = withPost();
+    const result = applyCommand(doc, {
+      type: "move-post",
+      postId: "post-1",
+      position: { x: 5000, y: 6000, z: 0 },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const base = result.document.anchors.find((a) => a.id === "anchor-base-1");
+      const top = result.document.anchors.find((a) => a.id === "anchor-top-1");
+      expect(base!.positionMm).toEqual({ x: 5000, y: 6000, z: 0 });
+      expect(top!.positionMm).toEqual({ x: 5000, y: 6000, z: 2400 });
+    }
+  });
+
+  it("moving a post also moves a beam that references its top anchor (reference-aware, not copied coordinates)", () => {
+    const withBeam = applyCommand(withPost(), {
+      type: "add-post",
+      postId: "post-2",
+      baseAnchorId: "anchor-base-2",
+      topAnchorId: "anchor-top-2",
+      sectionId: "sec-post",
+      heightMm: 2400,
+      position: { x: 9000, y: 2000, z: 0 },
+    });
+    if (!withBeam.ok) throw new Error("setup failed");
+    const doc2 = withBeam.document;
+    doc2.sections.push({ id: "sec-beam", name: "Beam", widthMm: 184, heightMm: 38 });
+    const beamResult = applyCommand(doc2, {
+      type: "add-beam",
+      memberId: "member-1",
+      startAnchorId: "anchor-top-1",
+      endAnchorId: "anchor-top-2",
+      sectionId: "sec-beam",
+    });
+    if (!beamResult.ok) throw new Error("setup failed");
+
+    const moved = applyCommand(beamResult.document, {
+      type: "move-post",
+      postId: "post-1",
+      position: { x: 5000, y: 6000, z: 0 },
+    });
+    expect(moved.ok).toBe(true);
+    if (moved.ok) {
+      const member = moved.document.members.find((m) => m.id === "member-1")!;
+      const startAnchor = moved.document.anchors.find((a) => a.id === member.startAnchorId)!;
+      expect(startAnchor.positionMm).toEqual({ x: 5000, y: 6000, z: 2400 });
+    }
+  });
+
+  it("rejects moving an unknown post", () => {
+    const doc = withPost();
+    const result = applyCommand(doc, { type: "move-post", postId: "missing", position: { x: 0, y: 0, z: 0 } });
+    expect(result.ok).toBe(false);
+  });
+
+  it("updates a post's height, recomputing the top anchor elevation", () => {
+    const doc = withPost();
+    const result = applyCommand(doc, {
+      type: "update-post",
+      postId: "post-1",
+      patch: { heightMm: 3000 },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.posts[0]!.heightMm).toBe(3000);
+      const top = result.document.anchors.find((a) => a.id === "anchor-top-1");
+      expect(top!.positionMm.z).toBe(3000);
+    }
+  });
+
+  it("updates a post's section", () => {
+    const doc = withPost();
+    doc.sections.push({ id: "sec-post-2", name: "Post 2", widthMm: 90, heightMm: 90 });
+    const result = applyCommand(doc, {
+      type: "update-post",
+      postId: "post-1",
+      patch: { sectionId: "sec-post-2" },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.posts[0]!.sectionId).toBe("sec-post-2");
+    }
+  });
+
+  it("rejects updating an unknown post", () => {
+    const doc = withPost();
+    const result = applyCommand(doc, { type: "update-post", postId: "missing", patch: { heightMm: 1000 } });
+    expect(result.ok).toBe(false);
+  });
+
+  it("deletes a post along with its base/top anchors", () => {
+    const doc = withPost();
+    const result = applyCommand(doc, { type: "delete-post", postId: "post-1" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.posts).toHaveLength(0);
+      expect(result.document.anchors.find((a) => a.id === "anchor-base-1")).toBeUndefined();
+      expect(result.document.anchors.find((a) => a.id === "anchor-top-1")).toBeUndefined();
+    }
+  });
+
+  it("deleting a post cascades to delete beams connected to its anchors, never leaving a dangling reference", () => {
+    const withBeam = applyCommand(withPost(), {
+      type: "add-post",
+      postId: "post-2",
+      baseAnchorId: "anchor-base-2",
+      topAnchorId: "anchor-top-2",
+      sectionId: "sec-post",
+      heightMm: 2400,
+      position: { x: 9000, y: 2000, z: 0 },
+    });
+    if (!withBeam.ok) throw new Error("setup failed");
+    const doc2 = withBeam.document;
+    doc2.sections.push({ id: "sec-beam", name: "Beam", widthMm: 184, heightMm: 38 });
+    const beamResult = applyCommand(doc2, {
+      type: "add-beam",
+      memberId: "member-1",
+      startAnchorId: "anchor-top-1",
+      endAnchorId: "anchor-top-2",
+      sectionId: "sec-beam",
+    });
+    if (!beamResult.ok) throw new Error("setup failed");
+
+    const result = applyCommand(beamResult.document, { type: "delete-post", postId: "post-1" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.members.find((m) => m.id === "member-1")).toBeUndefined();
+      expect(result.document.posts).toHaveLength(1);
+    }
+  });
+
+  it("rejects deleting an unknown post", () => {
+    const doc = withPost();
+    const result = applyCommand(doc, { type: "delete-post", postId: "missing" });
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("applyCommand: house anchors", () => {
+  it("adds a house-kind anchor at the given position", () => {
+    const doc = baseDoc();
+    const result = applyCommand(doc, {
+      type: "add-house-anchor",
+      anchorId: "anchor-house-1",
+      position: { x: 100, y: 0, z: 2700 },
+      sourceRef: "house-1",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.anchors).toEqual([
+        { id: "anchor-house-1", kind: "house", positionMm: { x: 100, y: 0, z: 2700 }, sourceRef: "house-1" },
+      ]);
+    }
+  });
+
+  it("rejects a duplicate anchor id", () => {
+    const added = applyCommand(baseDoc(), {
+      type: "add-house-anchor",
+      anchorId: "anchor-house-1",
+      position: { x: 100, y: 0, z: 2700 },
+    });
+    if (!added.ok) throw new Error("setup failed");
+    const result = applyCommand(added.document, {
+      type: "add-house-anchor",
+      anchorId: "anchor-house-1",
+      position: { x: 200, y: 0, z: 2700 },
+    });
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("applyCommand: beams", () => {
+  function withTwoAnchors(): ProjectDocument {
+    const doc = baseDoc();
+    doc.sections.push({ id: "sec-beam", name: "Beam", widthMm: 184, heightMm: 38 });
+    doc.anchors.push(
+      { id: "anchor-1", kind: "free", positionMm: { x: 0, y: 0, z: 2400 } },
+      { id: "anchor-2", kind: "free", positionMm: { x: 1000, y: 0, z: 2400 } },
+    );
+    return doc;
+  }
+
+  it("adds a beam referencing two distinct anchors", () => {
+    const doc = withTwoAnchors();
+    const result = applyCommand(doc, {
+      type: "add-beam",
+      memberId: "member-1",
+      startAnchorId: "anchor-1",
+      endAnchorId: "anchor-2",
+      sectionId: "sec-beam",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.members[0]).toEqual({
+        id: "member-1",
+        role: "perimeter-beam",
+        startAnchorId: "anchor-1",
+        endAnchorId: "anchor-2",
+        sectionId: "sec-beam",
+        rollRad: 0,
+      });
+    }
+  });
+
+  it("rejects a beam whose start and end anchor are the same", () => {
+    const doc = withTwoAnchors();
+    const result = applyCommand(doc, {
+      type: "add-beam",
+      memberId: "member-1",
+      startAnchorId: "anchor-1",
+      endAnchorId: "anchor-1",
+      sectionId: "sec-beam",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/different anchors/i);
+    }
+  });
+
+  it("rejects a beam referencing an unknown anchor", () => {
+    const doc = withTwoAnchors();
+    const result = applyCommand(doc, {
+      type: "add-beam",
+      memberId: "member-1",
+      startAnchorId: "anchor-1",
+      endAnchorId: "missing",
+      sectionId: "sec-beam",
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  function withBeam(): ProjectDocument {
+    const result = applyCommand(withTwoAnchors(), {
+      type: "add-beam",
+      memberId: "member-1",
+      startAnchorId: "anchor-1",
+      endAnchorId: "anchor-2",
+      sectionId: "sec-beam",
+    });
+    if (!result.ok) throw new Error("setup failed");
+    return result.document;
+  }
+
+  it("updates a beam's section and roll", () => {
+    const doc = withBeam();
+    doc.sections.push({ id: "sec-beam-2", name: "Beam 2", widthMm: 89, heightMm: 38 });
+    const result = applyCommand(doc, {
+      type: "update-beam",
+      memberId: "member-1",
+      patch: { sectionId: "sec-beam-2", rollRad: 0.2 },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.members[0]!.sectionId).toBe("sec-beam-2");
+      expect(result.document.members[0]!.rollRad).toBeCloseTo(0.2, 10);
+    }
+  });
+
+  it("rejects updating an unknown beam", () => {
+    const doc = withBeam();
+    const result = applyCommand(doc, { type: "update-beam", memberId: "missing", patch: { rollRad: 0.1 } });
+    expect(result.ok).toBe(false);
+  });
+
+  it("deletes a beam", () => {
+    const doc = withBeam();
+    const result = applyCommand(doc, { type: "delete-beam", memberId: "member-1" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.members).toHaveLength(0);
+    }
+  });
+
+  it("rejects deleting an unknown beam", () => {
+    const doc = withBeam();
+    const result = applyCommand(doc, { type: "delete-beam", memberId: "missing" });
+    expect(result.ok).toBe(false);
+  });
+
+  it("blocks deleting a beam that is still referenced by a joint, rather than leaving it dangling", () => {
+    const doc = withBeam();
+    doc.joints.push({
+      id: "joint-1",
+      connectedMemberIds: ["member-1"],
+      positionMm: { x: 500, y: 0, z: 2400 },
+      crossingBehavior: "unresolved",
+      engineeringStatus: "engineer-review-required",
+    });
+    const result = applyCommand(doc, { type: "delete-beam", memberId: "member-1" });
+    expect(result.ok).toBe(false);
+  });
+});
+
 describe("applyCommand: update-gutter", () => {
   function withRoofedOutline(): ProjectDocument {
     const withOutlineResult = applyCommand(baseDoc(), {

@@ -11,6 +11,7 @@ export type InteractionState =
   | { status: "selecting" }
   | { status: "drawing" }
   | { status: "drawing-house-outline"; points: Vector3Mm[]; error?: string }
+  | { status: "drawing-beam"; startAnchorId: string | null }
   | { status: "placing" }
   | { status: "dragging"; objectId: string }
   | { status: "invalid"; reason: string };

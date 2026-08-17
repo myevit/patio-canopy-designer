@@ -33,7 +33,39 @@ export type DocumentCommand =
         widthMm: number;
         dropMm: number;
       }>;
-    };
+    }
+  | {
+      type: "add-post";
+      postId: string;
+      baseAnchorId: string;
+      topAnchorId: string;
+      sectionId: string;
+      heightMm: number;
+      position: Vector3Mm;
+    }
+  | { type: "move-post"; postId: string; position: Vector3Mm }
+  | {
+      type: "update-post";
+      postId: string;
+      patch: Partial<{ heightMm: number; sectionId: string }>;
+    }
+  | { type: "delete-post"; postId: string }
+  | { type: "add-house-anchor"; anchorId: string; position: Vector3Mm; sourceRef?: string }
+  | {
+      type: "add-beam";
+      memberId: string;
+      startAnchorId: string;
+      endAnchorId: string;
+      sectionId: string;
+      materialId?: string;
+      rollRad?: number;
+    }
+  | {
+      type: "update-beam";
+      memberId: string;
+      patch: Partial<{ sectionId: string; materialId: string; rollRad: number }>;
+    }
+  | { type: "delete-beam"; memberId: string };
 
 export type CommandResult =
   | { ok: true; document: ProjectDocument }

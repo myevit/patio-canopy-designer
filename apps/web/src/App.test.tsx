@@ -235,6 +235,138 @@ describe("App: house outline authoring", () => {
   });
 });
 
+describe("App: posts and beams", () => {
+  function mockRect() {
+    const rect = { left: 0, top: 0, width: 8400, height: 5200 };
+    vi.spyOn(SVGElement.prototype, "getBoundingClientRect").mockReturnValue({
+      ...rect,
+      right: rect.width,
+      bottom: rect.height,
+      x: 0,
+      y: 0,
+      toJSON: () => rect,
+    } as DOMRect);
+  }
+
+  async function placeTwoPosts(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "Post" }));
+    const svg = screen.getByTestId("plan-view-svg");
+    fireEvent.click(svg, { clientX: 2600, clientY: 2400 }); // world (2000, 2000)
+    fireEvent.click(svg, { clientX: 5600, clientY: 2400 }); // world (5000, 2000)
+    const posts = screen.getAllByTestId(/^scene-object-post-/);
+    return { postA: posts.at(-2)!, postB: posts.at(-1)! };
+  }
+
+  it("Post tool places a post at the snapped click location, one post per click", async () => {
+    mockRect();
+    const user = userEvent.setup();
+    renderApp();
+    const before = screen.getAllByTestId(/^scene-object-post-/).length;
+
+    await user.click(screen.getByRole("button", { name: "Post" }));
+    const svg = screen.getByTestId("plan-view-svg");
+    fireEvent.click(svg, { clientX: 2600, clientY: 2400 });
+
+    const after = screen.getAllByTestId(/^scene-object-post-/);
+    expect(after.length).toBe(before + 1);
+    expect(after.at(-1)!).toHaveAttribute("cx", "2000");
+    expect(after.at(-1)!).toHaveAttribute("cy", "2000");
+  });
+
+  it("Beam tool: choosing a start post then an end post commits a beam between their top anchors", async () => {
+    mockRect();
+    const user = userEvent.setup();
+    renderApp();
+    const { postA, postB } = await placeTwoPosts(user);
+    const beamsBefore = screen.getAllByTestId(/^scene-object-member-/).length;
+
+    await user.click(screen.getByRole("button", { name: "Beam" }));
+    fireEvent.click(postA);
+    fireEvent.click(postB);
+
+    const beams = screen.getAllByTestId(/^scene-object-member-/);
+    expect(beams.length).toBe(beamsBefore + 1);
+    const newBeam = beams.at(-1)!;
+    expect(newBeam).toHaveAttribute("x1", "2000");
+    expect(newBeam).toHaveAttribute("y1", "2000");
+    expect(newBeam).toHaveAttribute("x2", "5000");
+    expect(newBeam).toHaveAttribute("y2", "2000");
+  });
+
+  it("moving a post updates the connected beam's endpoint (reference-aware movement)", async () => {
+    mockRect();
+    const user = userEvent.setup();
+    renderApp();
+    const { postA, postB } = await placeTwoPosts(user);
+    await user.click(screen.getByRole("button", { name: "Beam" }));
+    fireEvent.click(postA);
+    fireEvent.click(postB);
+    const beam = screen.getAllByTestId(/^scene-object-member-/).at(-1)!;
+
+    await user.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(postA);
+    const xField = screen.getByLabelText(/base x/i);
+    fireEvent.change(xField, { target: { value: "2500" } });
+    fireEvent.blur(xField);
+
+    expect(postA).toHaveAttribute("cx", "2500");
+    expect(beam).toHaveAttribute("x1", "2500");
+  });
+
+  it("deleting a post cascades to delete a beam connected to it, leaving no dangling reference", async () => {
+    mockRect();
+    const user = userEvent.setup();
+    renderApp();
+    const { postA, postB } = await placeTwoPosts(user);
+    await user.click(screen.getByRole("button", { name: "Beam" }));
+    fireEvent.click(postA);
+    fireEvent.click(postB);
+    const beamsWithConnection = screen.getAllByTestId(/^scene-object-member-/).length;
+
+    await user.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(postA);
+    await user.click(screen.getByRole("button", { name: /delete post/i }));
+
+    expect(screen.queryByTestId(postA.getAttribute("data-testid")!)).not.toBeInTheDocument();
+    expect(screen.getAllByTestId(/^scene-object-member-/).length).toBe(beamsWithConnection - 1);
+  });
+
+  it("deletes the selected post via the Delete key", async () => {
+    mockRect();
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(screen.getByRole("button", { name: "Post" }));
+    const svg = screen.getByTestId("plan-view-svg");
+    fireEvent.click(svg, { clientX: 2600, clientY: 2400 });
+    await user.click(screen.getByRole("button", { name: "Select" }));
+    const post = screen.getAllByTestId(/^scene-object-post-/).at(-1)!;
+    const testId = post.getAttribute("data-testid")!;
+    fireEvent.click(post);
+
+    fireEvent.keyDown(window, { key: "Delete" });
+
+    expect(screen.queryByTestId(testId)).not.toBeInTheDocument();
+  });
+
+  it("deletes the selected beam via the Inspector", async () => {
+    mockRect();
+    const user = userEvent.setup();
+    renderApp();
+    const { postA, postB } = await placeTwoPosts(user);
+    await user.click(screen.getByRole("button", { name: "Beam" }));
+    fireEvent.click(postA);
+    fireEvent.click(postB);
+    const beam = screen.getAllByTestId(/^scene-object-member-/).at(-1)!;
+    const beamTestId = beam.getAttribute("data-testid")!;
+
+    await user.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(beam);
+    await user.click(screen.getByRole("button", { name: /delete beam/i }));
+
+    expect(screen.queryByTestId(beamTestId)).not.toBeInTheDocument();
+  });
+});
+
 describe("App: undo/redo and project menu", () => {
   function mockRect() {
     const rect = { left: 0, top: 0, width: 8400, height: 5200 };

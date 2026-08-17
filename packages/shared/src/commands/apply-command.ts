@@ -150,5 +150,113 @@ export function applyCommand(document: ProjectDocument, command: DocumentCommand
       Object.assign(gutter, command.patch);
       return finalize(draft);
     }
+
+    case "add-post": {
+      draft.anchors.push(
+        { id: command.baseAnchorId, kind: "post-base", positionMm: command.position },
+        {
+          id: command.topAnchorId,
+          kind: "post-top",
+          positionMm: { ...command.position, z: command.position.z + command.heightMm },
+        },
+      );
+      draft.posts.push({
+        id: command.postId,
+        baseAnchorId: command.baseAnchorId,
+        topAnchorId: command.topAnchorId,
+        sectionId: command.sectionId,
+        heightMm: command.heightMm,
+      });
+      return finalize(draft);
+    }
+
+    case "move-post": {
+      const post = draft.posts.find((p) => p.id === command.postId);
+      if (!post) {
+        return { ok: false, error: `Unknown post id: ${command.postId}` };
+      }
+      const base = draft.anchors.find((a) => a.id === post.baseAnchorId);
+      const top = draft.anchors.find((a) => a.id === post.topAnchorId);
+      if (!base || !top) {
+        return { ok: false, error: `Post ${command.postId} is missing its anchors.` };
+      }
+      base.positionMm = command.position;
+      top.positionMm = { ...command.position, z: command.position.z + post.heightMm };
+      return finalize(draft);
+    }
+
+    case "update-post": {
+      const post = draft.posts.find((p) => p.id === command.postId);
+      if (!post) {
+        return { ok: false, error: `Unknown post id: ${command.postId}` };
+      }
+      Object.assign(post, command.patch);
+      if (command.patch.heightMm !== undefined) {
+        const base = draft.anchors.find((a) => a.id === post.baseAnchorId);
+        const top = draft.anchors.find((a) => a.id === post.topAnchorId);
+        if (base && top) {
+          top.positionMm = { ...base.positionMm, z: base.positionMm.z + post.heightMm };
+        }
+      }
+      return finalize(draft);
+    }
+
+    case "delete-post": {
+      const post = draft.posts.find((p) => p.id === command.postId);
+      if (!post) {
+        return { ok: false, error: `Unknown post id: ${command.postId}` };
+      }
+      draft.posts = draft.posts.filter((p) => p.id !== command.postId);
+      draft.members = draft.members.filter(
+        (m) => m.startAnchorId !== post.baseAnchorId && m.endAnchorId !== post.baseAnchorId &&
+          m.startAnchorId !== post.topAnchorId && m.endAnchorId !== post.topAnchorId,
+      );
+      draft.anchors = draft.anchors.filter((a) => a.id !== post.baseAnchorId && a.id !== post.topAnchorId);
+      return finalize(draft);
+    }
+
+    case "add-house-anchor": {
+      draft.anchors.push({
+        id: command.anchorId,
+        kind: "house",
+        positionMm: command.position,
+        ...(command.sourceRef !== undefined ? { sourceRef: command.sourceRef } : {}),
+      });
+      return finalize(draft);
+    }
+
+    case "add-beam": {
+      if (command.startAnchorId === command.endAnchorId) {
+        return { ok: false, error: "A beam needs two different anchors." };
+      }
+      draft.members.push({
+        id: command.memberId,
+        role: "perimeter-beam",
+        startAnchorId: command.startAnchorId,
+        endAnchorId: command.endAnchorId,
+        sectionId: command.sectionId,
+        rollRad: command.rollRad ?? 0,
+        ...(command.materialId !== undefined ? { materialId: command.materialId } : {}),
+      });
+      return finalize(draft);
+    }
+
+    case "update-beam": {
+      const member = draft.members.find((m) => m.id === command.memberId);
+      if (!member) {
+        return { ok: false, error: `Unknown member id: ${command.memberId}` };
+      }
+      Object.assign(member, command.patch);
+      return finalize(draft);
+    }
+
+    case "delete-beam": {
+      const member = draft.members.find((m) => m.id === command.memberId);
+      if (!member) {
+        return { ok: false, error: `Unknown member id: ${command.memberId}` };
+      }
+      draft.members = draft.members.filter((m) => m.id !== command.memberId);
+      return finalize(draft);
+    }
   }
 }

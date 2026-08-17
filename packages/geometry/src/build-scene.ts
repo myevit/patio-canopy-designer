@@ -97,6 +97,8 @@ export function buildScene(document: ProjectDocument): ScenePrimitives {
         kind: "post" as const,
         base: anchorPosition(anchors, post.baseAnchorId),
         top: anchorPosition(anchors, post.topAnchorId),
+        baseAnchorId: post.baseAnchorId,
+        topAnchorId: post.topAnchorId,
         widthMm,
         depthMm: heightMm,
       };
@@ -111,6 +113,7 @@ export function buildScene(document: ProjectDocument): ScenePrimitives {
         end: anchorPosition(anchors, member.endAnchorId),
         widthMm,
         heightMm,
+        rollRad: member.rollRad,
       };
     }),
     joints: document.joints.map((joint) => ({
@@ -119,5 +122,12 @@ export function buildScene(document: ProjectDocument): ScenePrimitives {
       position: joint.positionMm,
       connectedMemberIds: joint.connectedMemberIds,
     })),
+    houseAnchors: document.anchors
+      .filter((anchor) => anchor.kind === "house")
+      .map((anchor) => ({
+        id: anchor.id,
+        kind: "house-anchor" as const,
+        position: anchor.positionMm,
+      })),
   };
 }

@@ -37,6 +37,16 @@ describe("StatusBar", () => {
     expect(screen.getByText(/the outline encloses zero area/i)).toBeInTheDocument();
   });
 
+  it("prompts for a start anchor at the beginning of the beam flow", () => {
+    render(<StatusBar tool="beam" interaction={{ status: "drawing-beam", startAnchorId: null }} />);
+    expect(screen.getByText(/choose.*start anchor/i)).toBeInTheDocument();
+  });
+
+  it("prompts for an end anchor once a beam's start anchor is chosen", () => {
+    render(<StatusBar tool="beam" interaction={{ status: "drawing-beam", startAnchorId: "anchor-1" }} />);
+    expect(screen.getByText(/choose.*end anchor/i)).toBeInTheDocument();
+  });
+
   it("shows a persistence error when one is present", () => {
     render(<StatusBar tool="select" interaction={{ status: "idle" }} persistenceError="disk full" />);
     expect(screen.getByText(/disk full/i)).toBeInTheDocument();

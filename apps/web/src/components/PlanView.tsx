@@ -2,7 +2,10 @@ import { useRef, useState } from "react";
 import type { ScenePrimitives } from "@canopy/geometry";
 import type { Vector3Mm } from "@canopy/shared";
 import type { KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent } from "react";
+import { projectPointOntoSegment } from "../scene/geometry-helpers.js";
 import { clientPointToWorld } from "../scene/plan-coordinates.js";
+import { snapPostPosition } from "../scene/post-snapping.js";
+import { resolveAnchorPosition } from "../scene/scene-selectors.js";
 import type { SelectedVertex } from "../state/selected-vertex.js";
 import type { ToolId } from "../state/tool.js";
 
@@ -10,6 +13,8 @@ const VIEW_BOX = "-600 -400 8400 5200";
 const VERTEX_RADIUS = 40;
 const CLOSE_AFFORDANCE_RADIUS = 70;
 const MIDPOINT_RADIUS = 25;
+const POST_PREVIEW_RADIUS = 70;
+const HOUSE_ANCHOR_HALF_SIZE = 30;
 
 function toPoints(points: Vector3Mm[]): string {
   return points.map((p) => `${p.x},${p.y}`).join(" ");
@@ -38,6 +43,11 @@ export interface PlanViewProps {
   onCloseDrawing?: () => void;
   onMoveVertex?: (vertex: SelectedVertex, position: Vector3Mm) => void;
   onInsertVertex?: (outlineId: string, afterIndex: number, position: Vector3Mm) => void;
+  onPlacePost?: (position: Vector3Mm) => void;
+  onMovePost?: (postId: string, position: Vector3Mm) => void;
+  beamStartAnchorId?: string | null;
+  onChooseBeamAnchor?: (anchorId: string) => void;
+  onCreateHouseAnchorOnGutter?: (gutterId: string, position: Vector3Mm) => void;
 }
 
 export function PlanView({
@@ -52,19 +62,45 @@ export function PlanView({
   onCloseDrawing = () => {},
   onMoveVertex = () => {},
   onInsertVertex = () => {},
+  onPlacePost = () => {},
+  onMovePost = () => {},
+  beamStartAnchorId = null,
+  onChooseBeamAnchor = () => {},
+  onCreateHouseAnchorOnGutter = () => {},
 }: PlanViewProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [dragPreview, setDragPreview] = useState<{ vertex: SelectedVertex; position: Vector3Mm } | null>(null);
+  const [postDragPreview, setPostDragPreview] = useState<{ postId: string; position: Vector3Mm } | null>(null);
+  const [postPlacementPreview, setPostPlacementPreview] = useState<Vector3Mm | null>(null);
+  const [hoveredBeamAnchorId, setHoveredBeamAnchorId] = useState<string | null>(null);
 
   function worldPointFromEvent(event: { clientX: number; clientY: number }): Vector3Mm {
     const rect = svgRef.current!.getBoundingClientRect();
     return clientPointToWorld(VIEW_BOX, rect, event.clientX, event.clientY);
   }
 
+  function snapTargets() {
+    return { outlines: [...scene.houseOutlines.map((o) => o.points), ...scene.patioOutlines.map((o) => o.points)] };
+  }
+
   function handleBackgroundClick(event: MouseEvent<SVGSVGElement>) {
-    if (tool !== "house" || drawingPoints === null) return;
     if (event.target !== event.currentTarget) return;
-    onAddDrawingPoint(worldPointFromEvent(event));
+    if (tool === "house" && drawingPoints !== null) {
+      onAddDrawingPoint(worldPointFromEvent(event));
+      return;
+    }
+    if (tool === "post") {
+      const raw = worldPointFromEvent(event);
+      const snapped = snapPostPosition(raw, snapTargets(), { disabled: event.shiftKey });
+      onPlacePost(snapped.position);
+    }
+  }
+
+  function handleSvgPointerMove(event: ReactPointerEvent<SVGSVGElement>) {
+    if (tool !== "post") return;
+    const raw = worldPointFromEvent(event);
+    const snapped = snapPostPosition(raw, snapTargets(), { disabled: event.shiftKey });
+    setPostPlacementPreview(snapped.position);
   }
 
   function handleVertexPointerDown(event: ReactPointerEvent<SVGCircleElement>, vertex: SelectedVertex) {
@@ -94,6 +130,40 @@ export function PlanView({
     return points.map((p, i) => (i === dragPreview.vertex.index ? dragPreview.position : p));
   }
 
+  function handlePostPointerDown(event: ReactPointerEvent<SVGCircleElement>, postId: string, base: Vector3Mm) {
+    if (tool !== "select") return;
+    event.stopPropagation();
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is a progressive enhancement; some test/DOM environments don't implement it.
+    }
+    setPostDragPreview({ postId, position: base });
+  }
+
+  function handlePostPointerMove(event: ReactPointerEvent<SVGCircleElement>, postId: string) {
+    if (!postDragPreview || postDragPreview.postId !== postId) return;
+    setPostDragPreview({ postId, position: worldPointFromEvent(event) });
+  }
+
+  function handlePostPointerUp(event: ReactPointerEvent<SVGCircleElement>, postId: string) {
+    if (!postDragPreview || postDragPreview.postId !== postId) return;
+    onMovePost(postId, worldPointFromEvent(event));
+    setPostDragPreview(null);
+  }
+
+  function clearHoveredBeamAnchor(anchorId: string) {
+    setHoveredBeamAnchorId((current) => (current === anchorId ? null : current));
+  }
+
+  const beamPreview = (() => {
+    if (tool !== "beam" || !beamStartAnchorId || !hoveredBeamAnchorId) return null;
+    const start = resolveAnchorPosition(scene, beamStartAnchorId);
+    const end = resolveAnchorPosition(scene, hoveredBeamAnchorId);
+    if (!start || !end) return null;
+    return { start, end, valid: hoveredBeamAnchorId !== beamStartAnchorId };
+  })();
+
   return (
     <svg
       ref={svgRef}
@@ -103,6 +173,7 @@ export function PlanView({
       role="group"
       aria-label="Plan view"
       onClick={handleBackgroundClick}
+      onPointerMove={handleSvgPointerMove}
     >
       {scene.houseOutlines.map((outline) => {
         const points = displayedPoints(outline.id, outline.points);
@@ -261,7 +332,17 @@ export function PlanView({
           y1={gutter.start.y}
           x2={gutter.end.x}
           y2={gutter.end.y}
-          style={{ pointerEvents: "none" }}
+          style={{ pointerEvents: tool === "beam" ? "auto" : "none" }}
+          onClick={
+            tool === "beam"
+              ? (event) => {
+                  event.stopPropagation();
+                  const raw = worldPointFromEvent(event);
+                  const projected = projectPointOntoSegment(raw, gutter.start, gutter.end);
+                  onCreateHouseAnchorOnGutter(gutter.id, projected);
+                }
+              : undefined
+          }
         />
       ))}
       {scene.members.map((member) => (
@@ -286,23 +367,61 @@ export function PlanView({
           onKeyDown={(event) => handleSelectionKey(event, member.id, onSelect)}
         />
       ))}
-      {scene.posts.map((post) => (
-        <circle
-          key={post.id}
-          data-testid={`scene-object-${post.id}`}
-          data-selected={post.id === selectedObjectId}
-          className={post.id === selectedObjectId ? "plan-view__post plan-view__post--selected" : "plan-view__post"}
-          cx={post.base.x}
-          cy={post.base.y}
-          r={Math.max(post.widthMm, post.depthMm) / 2}
+      {scene.posts.map((post) => {
+        const displayedBase =
+          postDragPreview?.postId === post.id ? postDragPreview.position : post.base;
+        return (
+          <circle
+            key={post.id}
+            data-testid={`scene-object-${post.id}`}
+            data-selected={post.id === selectedObjectId}
+            className={post.id === selectedObjectId ? "plan-view__post plan-view__post--selected" : "plan-view__post"}
+            cx={displayedBase.x}
+            cy={displayedBase.y}
+            r={Math.max(post.widthMm, post.depthMm) / 2}
+            tabIndex={0}
+            role="button"
+            aria-label={`Post ${post.id}`}
+            onPointerDown={(event) => handlePostPointerDown(event, post.id, post.base)}
+            onPointerMove={(event) => handlePostPointerMove(event, post.id)}
+            onPointerUp={(event) => handlePostPointerUp(event, post.id)}
+            onPointerEnter={() => tool === "beam" && setHoveredBeamAnchorId(post.topAnchorId)}
+            onPointerLeave={() => clearHoveredBeamAnchor(post.topAnchorId)}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (tool === "beam") {
+                onChooseBeamAnchor(post.topAnchorId);
+              } else {
+                onSelect(post.id);
+              }
+            }}
+            onKeyDown={(event) => handleSelectionKey(event, post.id, onSelect)}
+          />
+        );
+      })}
+      {scene.houseAnchors.map((anchor) => (
+        <rect
+          key={anchor.id}
+          data-testid={`scene-object-${anchor.id}`}
+          className="plan-view__house-anchor"
+          x={anchor.position.x - HOUSE_ANCHOR_HALF_SIZE}
+          y={anchor.position.y - HOUSE_ANCHOR_HALF_SIZE}
+          width={HOUSE_ANCHOR_HALF_SIZE * 2}
+          height={HOUSE_ANCHOR_HALF_SIZE * 2}
           tabIndex={0}
           role="button"
-          aria-label={`Post ${post.id}`}
+          aria-label={`House anchor ${anchor.id}`}
+          onPointerEnter={() => tool === "beam" && setHoveredBeamAnchorId(anchor.id)}
+          onPointerLeave={() => clearHoveredBeamAnchor(anchor.id)}
           onClick={(event) => {
             event.stopPropagation();
-            onSelect(post.id);
+            if (tool === "beam") {
+              onChooseBeamAnchor(anchor.id);
+            }
           }}
-          onKeyDown={(event) => handleSelectionKey(event, post.id, onSelect)}
+          onKeyDown={(event) => {
+            if (tool === "beam") handleSelectionKey(event, anchor.id, onChooseBeamAnchor);
+          }}
         />
       ))}
       {scene.joints.map((joint) => (
@@ -327,6 +446,32 @@ export function PlanView({
           onKeyDown={(event) => handleSelectionKey(event, joint.id, onSelect)}
         />
       ))}
+      {beamPreview && (
+        <line
+          data-testid="beam-preview"
+          data-valid={beamPreview.valid}
+          className={
+            beamPreview.valid
+              ? "plan-view__beam-preview plan-view__beam-preview--valid"
+              : "plan-view__beam-preview plan-view__beam-preview--invalid"
+          }
+          x1={beamPreview.start.x}
+          y1={beamPreview.start.y}
+          x2={beamPreview.end.x}
+          y2={beamPreview.end.y}
+          pointerEvents="none"
+        />
+      )}
+      {tool === "post" && postPlacementPreview && (
+        <circle
+          data-testid="post-placement-preview"
+          className="plan-view__post-preview"
+          cx={postPlacementPreview.x}
+          cy={postPlacementPreview.y}
+          r={POST_PREVIEW_RADIUS}
+          pointerEvents="none"
+        />
+      )}
     </svg>
   );
 }

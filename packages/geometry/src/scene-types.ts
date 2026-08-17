@@ -45,8 +45,16 @@ export interface ScenePost {
   kind: "post";
   base: Vector3Mm;
   top: Vector3Mm;
+  baseAnchorId: string;
+  topAnchorId: string;
   widthMm: number;
   depthMm: number;
+}
+
+export interface SceneHouseAnchor {
+  id: string;
+  kind: "house-anchor";
+  position: Vector3Mm;
 }
 
 export interface SceneMember {
@@ -57,6 +65,7 @@ export interface SceneMember {
   end: Vector3Mm;
   widthMm: number;
   heightMm: number;
+  rollRad: number;
 }
 
 export interface SceneJoint {
@@ -75,6 +84,7 @@ export interface ScenePrimitives {
   posts: ScenePost[];
   members: SceneMember[];
   joints: SceneJoint[];
+  houseAnchors: SceneHouseAnchor[];
 }
 
 export type SceneObject = ScenePost | SceneMember | SceneJoint | SceneHouseOutline;

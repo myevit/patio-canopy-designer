@@ -1,14 +1,25 @@
 import { useEffect, useMemo, useReducer, useRef } from "react";
 import { buildScene } from "@canopy/geometry";
 import {
+  DEFAULT_BEAM_SECTION_ID,
+  DEFAULT_POST_SECTION_ID,
   SAMPLE_PROJECT,
   createEmptyProjectDocument,
   exportProjectDocument,
   importProjectDocument,
   type DocumentCommand,
+  type Section,
+  type Vector3Mm,
 } from "@canopy/shared";
 import { BottomDrawer } from "./components/BottomDrawer.js";
-import { Inspector, type CommandOutcome, type GutterPatch, type RoofPlanePatch } from "./components/Inspector.js";
+import {
+  Inspector,
+  type BeamPatch,
+  type CommandOutcome,
+  type GutterPatch,
+  type PostPatch,
+  type RoofPlanePatch,
+} from "./components/Inspector.js";
 import { PlanView } from "./components/PlanView.js";
 import { ProjectMenu } from "./components/ProjectMenu.js";
 import { StatusBar } from "./components/StatusBar.js";
@@ -18,6 +29,7 @@ import { ViewModeSwitcher } from "./components/ViewModeSwitcher.js";
 import { createDexiePersistenceAdapter } from "./persistence/dexie-persistence-adapter.js";
 import type { PersistenceAdapter } from "./persistence/persistence-adapter.js";
 import { useProjectPersistence } from "./persistence/use-project-persistence.js";
+import { distance2D } from "./scene/geometry-helpers.js";
 import { findSceneObject } from "./scene/scene-selectors.js";
 import type { SelectedVertex } from "./state/selected-vertex.js";
 import { initialStudioState, studioReducer } from "./state/studio-store.js";
@@ -30,6 +42,12 @@ function nextId(prefix: string): string {
 const DEFAULT_PITCH_RAD = (5 * Math.PI) / 180;
 const DEFAULT_GUTTER_WIDTH_MM = 100;
 const DEFAULT_GUTTER_DROP_MM = 50;
+const DEFAULT_POST_HEIGHT_MM = 2400;
+const HOUSE_ANCHOR_REUSE_TOLERANCE_MM = 100;
+
+function resolveDefaultSectionId(sections: Section[], preferredId: string): string {
+  return sections.find((s) => s.id === preferredId)?.id ?? sections[0]?.id ?? preferredId;
+}
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -89,8 +107,8 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
     }
   }
 
-  const latestRef = useRef({ state, dispatch, closeDrawing, handleDeleteVertex });
-  latestRef.current = { state, dispatch, closeDrawing, handleDeleteVertex };
+  const latestRef = useRef({ state, dispatch, closeDrawing, handleDeleteVertex, handleDeleteSelectedObject });
+  latestRef.current = { state, dispatch, closeDrawing, handleDeleteVertex, handleDeleteSelectedObject };
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -114,6 +132,11 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
       if (current.state.selectedVertex && (event.key === "Delete" || event.key === "Backspace")) {
         event.preventDefault();
         current.handleDeleteVertex(current.state.selectedVertex);
+        return;
+      }
+      if (current.state.selectedObjectId && (event.key === "Delete" || event.key === "Backspace")) {
+        event.preventDefault();
+        current.handleDeleteSelectedObject(current.state.selectedObjectId);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -198,6 +221,140 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
     return result;
   }
 
+  function handlePlacePost(position: Vector3Mm) {
+    const sectionId = resolveDefaultSectionId(documentController.document.sections, DEFAULT_POST_SECTION_ID);
+    const result = dispatchGatedCommand({
+      type: "add-post",
+      postId: nextId("post"),
+      baseAnchorId: nextId("anchor-base"),
+      topAnchorId: nextId("anchor-top"),
+      sectionId,
+      heightMm: DEFAULT_POST_HEIGHT_MM,
+      position,
+    });
+    if (!result.ok) {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+  }
+
+  function handleMovePost(postId: string, position: Vector3Mm): CommandOutcome {
+    const post = scene.posts.find((p) => p.id === postId);
+    const result = dispatchGatedCommand({
+      type: "move-post",
+      postId,
+      position: { ...position, z: post?.base.z ?? position.z },
+    });
+    if (!result.ok) {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+    return result;
+  }
+
+  function handleUpdatePost(postId: string, patch: PostPatch): CommandOutcome {
+    const result = dispatchGatedCommand({ type: "update-post", postId, patch });
+    if (!result.ok) {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+    return result;
+  }
+
+  function handleDuplicatePost(postId: string) {
+    const source = documentController.document.posts.find((p) => p.id === postId);
+    const baseAnchor = documentController.document.anchors.find((a) => a.id === source?.baseAnchorId);
+    if (!source || !baseAnchor) return;
+    const result = dispatchGatedCommand({
+      type: "add-post",
+      postId: nextId("post"),
+      baseAnchorId: nextId("anchor-base"),
+      topAnchorId: nextId("anchor-top"),
+      sectionId: source.sectionId,
+      heightMm: source.heightMm,
+      position: { ...baseAnchor.positionMm, x: baseAnchor.positionMm.x + 300, y: baseAnchor.positionMm.y + 300 },
+    });
+    if (!result.ok) {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+  }
+
+  function handleDeletePost(postId: string) {
+    const result = dispatchGatedCommand({ type: "delete-post", postId });
+    if (result.ok) {
+      if (state.selectedObjectId === postId) {
+        dispatch({ type: "select-object", objectId: null });
+      }
+    } else {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+  }
+
+  function handleChooseBeamAnchor(anchorId: string) {
+    if (state.interaction.status !== "drawing-beam") return;
+    const startAnchorId = state.interaction.startAnchorId;
+    if (startAnchorId === null) {
+      dispatch({ type: "set-beam-start-anchor", anchorId });
+      return;
+    }
+    if (anchorId === startAnchorId) return;
+    const sectionId = resolveDefaultSectionId(documentController.document.sections, DEFAULT_BEAM_SECTION_ID);
+    const result = dispatchGatedCommand({
+      type: "add-beam",
+      memberId: nextId("member"),
+      startAnchorId,
+      endAnchorId: anchorId,
+      sectionId,
+    });
+    if (result.ok) {
+      dispatch({ type: "set-beam-start-anchor", anchorId: null });
+    } else {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+  }
+
+  function handleCreateHouseAnchorOnGutter(gutterId: string, position: Vector3Mm) {
+    const existing = scene.houseAnchors.find(
+      (anchor) => distance2D(anchor.position, position) <= HOUSE_ANCHOR_REUSE_TOLERANCE_MM,
+    );
+    if (existing) {
+      handleChooseBeamAnchor(existing.id);
+      return;
+    }
+    const anchorId = nextId("anchor-house");
+    const result = dispatchGatedCommand({ type: "add-house-anchor", anchorId, position, sourceRef: gutterId });
+    if (result.ok) {
+      handleChooseBeamAnchor(anchorId);
+    } else {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+  }
+
+  function handleUpdateBeam(memberId: string, patch: BeamPatch): CommandOutcome {
+    const result = dispatchGatedCommand({ type: "update-beam", memberId, patch });
+    if (!result.ok) {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+    return result;
+  }
+
+  function handleDeleteBeam(memberId: string) {
+    const result = dispatchGatedCommand({ type: "delete-beam", memberId });
+    if (result.ok) {
+      if (state.selectedObjectId === memberId) {
+        dispatch({ type: "select-object", objectId: null });
+      }
+    } else {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+  }
+
+  function handleDeleteSelectedObject(objectId: string) {
+    const object = findSceneObject(scene, objectId);
+    if (object?.kind === "post") {
+      handleDeletePost(objectId);
+    } else if (object?.kind === "member") {
+      handleDeleteBeam(objectId);
+    }
+  }
+
   function handleNewProject() {
     documentController.resetTo(
       createEmptyProjectDocument({ name: "Untitled project", createdAt: new Date().toISOString() }),
@@ -267,6 +424,11 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
               onCloseDrawing={closeDrawing}
               onMoveVertex={handleMoveVertex}
               onInsertVertex={handleInsertVertex}
+              onPlacePost={handlePlacePost}
+              onMovePost={handleMovePost}
+              beamStartAnchorId={state.interaction.status === "drawing-beam" ? state.interaction.startAnchorId : null}
+              onChooseBeamAnchor={handleChooseBeamAnchor}
+              onCreateHouseAnchorOnGutter={handleCreateHouseAnchorOnGutter}
             />
           )}
           {showThree && (
@@ -274,6 +436,8 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
               scene={scene}
               selectedObjectId={state.selectedObjectId}
               onSelect={(objectId) => dispatch({ type: "select-object", objectId })}
+              tool={state.tool}
+              onChooseBeamAnchor={handleChooseBeamAnchor}
             />
           )}
         </main>
@@ -284,6 +448,7 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
           roofPlane={roofPlaneForSelected}
           gutter={gutterForSelectedRoofPlane}
           drawingPoints={drawingPoints}
+          sections={documentController.document.sections}
           onMoveVertex={handleMoveVertex}
           onDeleteVertex={handleDeleteVertex}
           onAddRoofPlane={handleAddRoofPlane}
@@ -292,6 +457,12 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
           onAddDrawingPoint={(point) => dispatch({ type: "add-outline-point", point })}
           onRemoveLastDrawingPoint={() => dispatch({ type: "remove-last-outline-point" })}
           onCloseDrawing={closeDrawing}
+          onMovePost={handleMovePost}
+          onUpdatePost={handleUpdatePost}
+          onDuplicatePost={handleDuplicatePost}
+          onDeletePost={handleDeletePost}
+          onUpdateBeam={handleUpdateBeam}
+          onDeleteBeam={handleDeleteBeam}
         />
       </div>
 

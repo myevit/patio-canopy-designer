@@ -15,6 +15,8 @@ describe("Inspector", () => {
       kind: "post",
       base: { x: 100, y: 200, z: 0 },
       top: { x: 100, y: 200, z: 2400 },
+      baseAnchorId: "anchor-base",
+      topAnchorId: "anchor-top",
       widthMm: 140,
       depthMm: 140,
     };
@@ -34,6 +36,7 @@ describe("Inspector", () => {
       end: { x: 0, y: 0, z: 2400 },
       widthMm: 89,
       heightMm: 38,
+      rollRad: 0,
     };
     render(<Inspector selected={member} />);
     expect(screen.getByText("member-1")).toBeInTheDocument();
@@ -51,6 +54,116 @@ describe("Inspector", () => {
     expect(screen.getByText("joint-1")).toBeInTheDocument();
     expect(screen.getByText(/member-1/)).toBeInTheDocument();
     expect(screen.getByText(/member-2/)).toBeInTheDocument();
+  });
+});
+
+describe("Inspector post editing", () => {
+  const post: SceneObject = {
+    id: "post-1",
+    kind: "post",
+    base: { x: 100, y: 200, z: 0 },
+    top: { x: 100, y: 200, z: 2400 },
+    baseAnchorId: "anchor-base",
+    topAnchorId: "anchor-top",
+    widthMm: 140,
+    depthMm: 140,
+  };
+  const sections = [
+    { id: "sec-post", name: "140x140 post", widthMm: 140, heightMm: 140 },
+    { id: "sec-post-2", name: "90x90 post", widthMm: 90, heightMm: 90 },
+  ];
+
+  it("shows editable base position, height, and section for a selected post", () => {
+    render(<Inspector selected={post} sections={sections} />);
+    expect(screen.getByLabelText(/base x/i)).toHaveValue(100);
+    expect(screen.getByLabelText(/base y/i)).toHaveValue(200);
+    expect(screen.getByLabelText(/height/i)).toHaveValue(2400);
+    expect(screen.getByLabelText(/section/i)).toHaveValue("sec-post");
+  });
+
+  it("commits a moved base X position", () => {
+    const onMovePost = vi.fn();
+    render(<Inspector selected={post} sections={sections} onMovePost={onMovePost} />);
+    const xField = screen.getByLabelText(/base x/i);
+    fireEvent.change(xField, { target: { value: "500" } });
+    fireEvent.blur(xField);
+    expect(onMovePost).toHaveBeenCalledWith("post-1", { x: 500, y: 200, z: 0 });
+  });
+
+  it("commits an updated height", () => {
+    const onUpdatePost = vi.fn();
+    render(<Inspector selected={post} sections={sections} onUpdatePost={onUpdatePost} />);
+    const heightField = screen.getByLabelText(/height/i);
+    fireEvent.change(heightField, { target: { value: "3000" } });
+    fireEvent.blur(heightField);
+    expect(onUpdatePost).toHaveBeenCalledWith("post-1", { heightMm: 3000 });
+  });
+
+  it("commits a changed section", () => {
+    const onUpdatePost = vi.fn();
+    render(<Inspector selected={post} sections={sections} onUpdatePost={onUpdatePost} />);
+    fireEvent.change(screen.getByLabelText(/section/i), { target: { value: "sec-post-2" } });
+    expect(onUpdatePost).toHaveBeenCalledWith("post-1", { sectionId: "sec-post-2" });
+  });
+
+  it("duplicates the selected post", () => {
+    const onDuplicatePost = vi.fn();
+    render(<Inspector selected={post} sections={sections} onDuplicatePost={onDuplicatePost} />);
+    fireEvent.click(screen.getByRole("button", { name: /duplicate post/i }));
+    expect(onDuplicatePost).toHaveBeenCalledWith("post-1");
+  });
+
+  it("deletes the selected post", () => {
+    const onDeletePost = vi.fn();
+    render(<Inspector selected={post} sections={sections} onDeletePost={onDeletePost} />);
+    fireEvent.click(screen.getByRole("button", { name: /delete post/i }));
+    expect(onDeletePost).toHaveBeenCalledWith("post-1");
+  });
+});
+
+describe("Inspector beam editing", () => {
+  const member: SceneObject = {
+    id: "member-1",
+    kind: "member",
+    role: "perimeter-beam",
+    start: { x: 0, y: 0, z: 2400 },
+    end: { x: 1000, y: 0, z: 2400 },
+    widthMm: 184,
+    heightMm: 38,
+    rollRad: 0,
+  };
+  const sections = [
+    { id: "sec-beam", name: "184x38 beam", widthMm: 184, heightMm: 38 },
+    { id: "sec-beam-2", name: "89x38 beam", widthMm: 89, heightMm: 38 },
+  ];
+
+  it("shows a section selector and orientation field for a selected beam", () => {
+    render(<Inspector selected={member} sections={sections} />);
+    expect(screen.getByLabelText(/section/i)).toHaveValue("sec-beam");
+    expect(screen.getByLabelText(/orientation/i)).toHaveValue(0);
+  });
+
+  it("commits a changed beam section", () => {
+    const onUpdateBeam = vi.fn();
+    render(<Inspector selected={member} sections={sections} onUpdateBeam={onUpdateBeam} />);
+    fireEvent.change(screen.getByLabelText(/section/i), { target: { value: "sec-beam-2" } });
+    expect(onUpdateBeam).toHaveBeenCalledWith("member-1", { sectionId: "sec-beam-2" });
+  });
+
+  it("commits a changed beam orientation, converting degrees to radians", () => {
+    const onUpdateBeam = vi.fn();
+    render(<Inspector selected={member} sections={sections} onUpdateBeam={onUpdateBeam} />);
+    const orientationField = screen.getByLabelText(/orientation/i);
+    fireEvent.change(orientationField, { target: { value: "90" } });
+    fireEvent.blur(orientationField);
+    expect(onUpdateBeam).toHaveBeenCalledWith("member-1", { rollRad: expect.closeTo(Math.PI / 2, 10) });
+  });
+
+  it("deletes the selected beam", () => {
+    const onDeleteBeam = vi.fn();
+    render(<Inspector selected={member} sections={sections} onDeleteBeam={onDeleteBeam} />);
+    fireEvent.click(screen.getByRole("button", { name: /delete beam/i }));
+    expect(onDeleteBeam).toHaveBeenCalledWith("member-1");
   });
 });
 

@@ -54,7 +54,16 @@ function scene(): ScenePrimitives {
     walls: [{ id: "house-1-wall-0", kind: "wall", start: { x: 0, y: 0, z: 0 }, end: { x: 4000, y: 0, z: 0 }, heightMm: 2700 }],
     patioOutlines: [],
     posts: [
-      { id: "post-1", kind: "post", base: { x: 0, y: 0, z: 0 }, top: { x: 0, y: 0, z: 2400 }, widthMm: 140, depthMm: 140 },
+      {
+        id: "post-1",
+        kind: "post",
+        base: { x: 0, y: 0, z: 0 },
+        top: { x: 0, y: 0, z: 2400 },
+        baseAnchorId: "anchor-base",
+        topAnchorId: "anchor-top",
+        widthMm: 140,
+        depthMm: 140,
+      },
     ],
     members: [
       {
@@ -65,10 +74,14 @@ function scene(): ScenePrimitives {
         end: { x: 1000, y: 500, z: 2400 },
         widthMm: 89,
         heightMm: 38,
+        rollRad: 0,
       },
     ],
     joints: [
       { id: "joint-1", kind: "joint", position: { x: 500, y: 250, z: 2500 }, connectedMemberIds: ["member-1"] },
+    ],
+    houseAnchors: [
+      { id: "anchor-house-1", kind: "house-anchor", position: { x: 3000, y: 0, z: 2700 } },
     ],
   };
 }
@@ -107,5 +120,64 @@ describe("ThreeView", () => {
     const ordinaryMaterial = screen.getByTestId("scene-object-member-1").querySelector("meshstandardmaterial");
     expect(selectedMaterial).toHaveAttribute("color", "#f2a600");
     expect(ordinaryMaterial).toHaveAttribute("color", "#5b7c99");
+  });
+
+  it("renders a mesh for each house anchor", () => {
+    render(<ThreeView scene={scene()} selectedObjectId={null} onSelect={() => {}} />);
+    expect(screen.getByTestId("scene-object-anchor-house-1")).toBeInTheDocument();
+  });
+});
+
+describe("ThreeView beam flow", () => {
+  it("clicking a post while the Beam tool is active chooses its top anchor instead of selecting it", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const onChooseBeamAnchor = vi.fn();
+    render(
+      <ThreeView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={onSelect}
+        tool="beam"
+        onChooseBeamAnchor={onChooseBeamAnchor}
+      />,
+    );
+    await user.click(screen.getByTestId("scene-object-post-1"));
+    expect(onChooseBeamAnchor).toHaveBeenCalledWith("anchor-top");
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("clicking a house anchor while the Beam tool is active chooses it", async () => {
+    const user = userEvent.setup();
+    const onChooseBeamAnchor = vi.fn();
+    render(
+      <ThreeView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="beam"
+        onChooseBeamAnchor={onChooseBeamAnchor}
+      />,
+    );
+    await user.click(screen.getByTestId("scene-object-anchor-house-1"));
+    expect(onChooseBeamAnchor).toHaveBeenCalledWith("anchor-house-1");
+  });
+
+  it("the accessible fallback list routes post selection through the beam-anchor handler when the Beam tool is active", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const onChooseBeamAnchor = vi.fn();
+    render(
+      <ThreeView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={onSelect}
+        tool="beam"
+        onChooseBeamAnchor={onChooseBeamAnchor}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Select post-1 in 3D scene" }));
+    expect(onChooseBeamAnchor).toHaveBeenCalledWith("anchor-top");
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });
