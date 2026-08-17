@@ -6,6 +6,7 @@ function scene(): ScenePrimitives {
   return {
     houseOutlines: [],
     roofPlanes: [],
+    gutters: [],
     walls: [],
     patioOutlines: [],
     posts: [

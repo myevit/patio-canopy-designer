@@ -18,6 +18,7 @@ function scene(): ScenePrimitives {
       },
     ],
     roofPlanes: [],
+    gutters: [],
     walls: [],
     patioOutlines: [
       {
@@ -266,5 +267,55 @@ describe("PlanView vertex editing", () => {
   it("does not render midpoint markers when the outline is not selected", () => {
     render(<PlanView scene={scene()} selectedObjectId={null} onSelect={() => {}} />);
     expect(screen.queryByTestId("house-midpoint-house-1-0")).not.toBeInTheDocument();
+  });
+});
+
+describe("PlanView roof and gutter rendering", () => {
+  function sceneWithRoofOverHouse(): ScenePrimitives {
+    const base = scene();
+    return {
+      ...base,
+      roofPlanes: [
+        {
+          id: "roof-1",
+          kind: "roof-plane",
+          houseOutlineId: "house-1",
+          referenceElevationMm: 2700,
+          pitchRad: 0.1,
+          directionRad: 0,
+          outline: base.houseOutlines[0]!.points,
+        },
+      ],
+      gutters: [
+        {
+          id: "gutter-1",
+          kind: "gutter",
+          roofPlaneId: "roof-1",
+          start: { x: 0, y: -300, z: 2700 },
+          end: { x: 100, y: -300, z: 2700 },
+          widthMm: 100,
+          dropMm: 50,
+        },
+      ],
+    };
+  }
+
+  it("renders a gutter line for each scene gutter", () => {
+    render(<PlanView scene={sceneWithRoofOverHouse()} selectedObjectId={null} onSelect={() => {}} />);
+    expect(screen.getByTestId("gutter-gutter-1")).toBeInTheDocument();
+  });
+
+  it("still selects the house outline underneath when the roof polygon fully covers it", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<PlanView scene={sceneWithRoofOverHouse()} selectedObjectId={null} onSelect={onSelect} />);
+    await user.click(screen.getByTestId("house-outline-house-1"));
+    expect(onSelect).toHaveBeenCalledWith("house-1");
+  });
+
+  it("gives the roof polygon no pointer events so it never intercepts clicks", () => {
+    render(<PlanView scene={sceneWithRoofOverHouse()} selectedObjectId={null} onSelect={() => {}} />);
+    const roof = screen.getByTestId("roof-plane-roof-1");
+    expect(roof).toHaveStyle({ pointerEvents: "none" });
   });
 });

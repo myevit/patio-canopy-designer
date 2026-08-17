@@ -36,4 +36,14 @@ describe("StatusBar", () => {
     );
     expect(screen.getByText(/the outline encloses zero area/i)).toBeInTheDocument();
   });
+
+  it("shows a persistence error when one is present", () => {
+    render(<StatusBar tool="select" interaction={{ status: "idle" }} persistenceError="disk full" />);
+    expect(screen.getByText(/disk full/i)).toBeInTheDocument();
+  });
+
+  it("does not show a persistence error section when there is none", () => {
+    render(<StatusBar tool="select" interaction={{ status: "idle" }} persistenceError={null} />);
+    expect(screen.queryByText(/persistence/i)).not.toBeInTheDocument();
+  });
 });

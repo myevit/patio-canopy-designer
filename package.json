@@ -18,10 +18,11 @@
     "test:e2e": "npm run test:e2e --workspaces --if-present"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.4",
-    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.2.0",
     "jsdom": "^30.0.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"

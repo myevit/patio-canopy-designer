@@ -3,27 +3,31 @@ import { expect, test } from "@playwright/test";
 async function drawTriangle(page: import("@playwright/test").Page) {
   const svg = page.getByTestId("plan-view-svg");
   const box = (await svg.boundingBox())!;
-  await svg.click({ position: { x: box.width * 0.03, y: box.height * 0.1 } });
-  await svg.click({ position: { x: box.width * 0.06, y: box.height * 0.1 } });
-  await svg.click({ position: { x: box.width * 0.06, y: box.height * 0.2 } });
+  await svg.click({ position: { x: box.width * 0.2, y: box.height * 0.3 } });
+  await svg.click({ position: { x: box.width * 0.5, y: box.height * 0.3 } });
+  await svg.click({ position: { x: box.width * 0.5, y: box.height * 0.6 } });
 }
 
 test("draw a house outline, correct an invalid one, undo/redo, and reload restores it", async ({ page }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await expect(page.getByLabel(/^House outline/)).toHaveCount(0);
 
   await page.getByRole("button", { name: "House", exact: true }).click();
   const svg = page.getByTestId("plan-view-svg");
   const box = (await svg.boundingBox())!;
 
   // Attempt a zero-area (collinear) outline first — must be rejected recoverably.
-  await svg.click({ position: { x: box.width * 0.03, y: box.height * 0.1 } });
-  await svg.click({ position: { x: box.width * 0.045, y: box.height * 0.1 } });
-  await svg.click({ position: { x: box.width * 0.06, y: box.height * 0.1 } });
+  await svg.click({ position: { x: box.width * 0.2, y: box.height * 0.3 } });
+  await expect(page.getByTestId("house-drawing-point-0")).toBeVisible();
+  await svg.click({ position: { x: box.width * 0.4, y: box.height * 0.3 } });
+  await expect(page.getByTestId("house-drawing-point-1")).toBeVisible();
+  await svg.click({ position: { x: box.width * 0.6, y: box.height * 0.3 } });
   await page.getByTestId("house-outline-close-affordance").click();
   await expect(page.getByRole("status")).toContainText(/zero area/i);
 
   // Correct it by adding a non-collinear point, then close.
-  await svg.click({ position: { x: box.width * 0.06, y: box.height * 0.2 } });
+  await svg.click({ position: { x: box.width * 0.6, y: box.height * 0.6 } });
   await page.getByTestId("house-outline-close-affordance").click();
   await expect(page.getByRole("button", { name: "Select", exact: true })).toHaveAttribute("aria-pressed", "true");
 
@@ -42,6 +46,8 @@ test("draw a house outline, correct an invalid one, undo/redo, and reload restor
 
 test("export, clear via New, and re-import restores the project", async ({ page }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await expect(page.getByLabel(/^House outline/)).toHaveCount(0);
   await page.getByRole("button", { name: "House", exact: true }).click();
   await drawTriangle(page);
   await page.getByTestId("house-outline-close-affordance").click();

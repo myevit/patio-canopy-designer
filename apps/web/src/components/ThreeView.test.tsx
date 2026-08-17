@@ -30,7 +30,7 @@ function scene(): ScenePrimitives {
         kind: "roof-plane",
         houseOutlineId: "house-1",
         referenceElevationMm: 2700,
-        pitchDeg: 10,
+        pitchRad: (10 * Math.PI) / 180,
         directionRad: 0,
         outline: [
           { x: 0, y: 0, z: 2700 },
@@ -38,12 +38,17 @@ function scene(): ScenePrimitives {
           { x: 4000, y: 3000, z: 2400 },
           { x: 0, y: 3000, z: 2700 },
         ],
-        gutter: {
-          start: { x: 4000, y: 0, z: 2400 },
-          end: { x: 4000, y: 3000, z: 2400 },
-          widthMm: 100,
-          dropMm: 50,
-        },
+      },
+    ],
+    gutters: [
+      {
+        id: "gutter-1",
+        kind: "gutter",
+        roofPlaneId: "roof-1",
+        start: { x: 4000, y: 0, z: 2400 },
+        end: { x: 4000, y: 3000, z: 2400 },
+        widthMm: 100,
+        dropMm: 50,
       },
     ],
     walls: [{ id: "house-1-wall-0", kind: "wall", start: { x: 0, y: 0, z: 0 }, end: { x: 4000, y: 0, z: 0 }, heightMm: 2700 }],
@@ -81,6 +86,11 @@ describe("ThreeView", () => {
     render(<ThreeView scene={scene()} selectedObjectId={null} onSelect={() => {}} />);
     expect(screen.getByTestId("scene-wall-house-1-wall-0")).toBeInTheDocument();
     expect(screen.getByTestId("scene-roof-plane-roof-1")).toBeInTheDocument();
+  });
+
+  it("renders a gutter mesh", () => {
+    render(<ThreeView scene={scene()} selectedObjectId={null} onSelect={() => {}} />);
+    expect(screen.getByTestId("scene-gutter-gutter-1")).toBeInTheDocument();
   });
 
   it("calls onSelect with the member id when the member mesh is clicked", async () => {

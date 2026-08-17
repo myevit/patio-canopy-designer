@@ -1,4 +1,5 @@
 import { parseProjectDocument, type ProjectDocument } from "../design-schema.js";
+import { selectEaveEdgeIndex } from "../eave-edge.js";
 import { validateOutline } from "../outline-validation.js";
 import { formatZodError } from "../zod-error.js";
 import type { CommandResult, DocumentCommand } from "./types.js";
@@ -62,6 +63,11 @@ export function applyCommand(document: ProjectDocument, command: DocumentCommand
         return { ok: false, error: validation.reason };
       }
       outline.points = nextPoints;
+      draft.site.gutters.forEach((gutter) => {
+        if (gutter.houseOutlineId === command.outlineId && gutter.edgeIndex > command.afterIndex) {
+          gutter.edgeIndex += 1;
+        }
+      });
       return finalize(draft);
     }
 
@@ -83,12 +89,19 @@ export function applyCommand(document: ProjectDocument, command: DocumentCommand
         return { ok: false, error: validation.reason };
       }
       outline.points = nextPoints;
+      draft.site.gutters.forEach((gutter) => {
+        if (gutter.houseOutlineId !== command.outlineId) return;
+        if (gutter.edgeIndex > command.vertexIndex) {
+          gutter.edgeIndex -= 1;
+        }
+        gutter.edgeIndex %= nextPoints.length;
+      });
       return finalize(draft);
     }
 
     case "add-roof-plane": {
-      const houseOutlineExists = draft.site.houseOutlines.some((o) => o.id === command.houseOutlineId);
-      if (!houseOutlineExists) {
+      const houseOutline = draft.site.houseOutlines.find((o) => o.id === command.houseOutlineId);
+      if (!houseOutline) {
         return { ok: false, error: `Unknown house outline id: ${command.houseOutlineId}` };
       }
       const alreadyRoofed = draft.site.roofPlanes.some((r) => r.houseOutlineId === command.houseOutlineId);
@@ -99,9 +112,16 @@ export function applyCommand(document: ProjectDocument, command: DocumentCommand
         id: command.roofPlaneId,
         houseOutlineId: command.houseOutlineId,
         referenceElevationMm: command.referenceElevationMm,
-        pitchDeg: command.pitchDeg,
+        pitchRad: command.pitchRad,
         directionRad: command.directionRad,
-        gutter: command.gutter,
+      });
+      draft.site.gutters.push({
+        id: command.gutterId,
+        roofPlaneId: command.roofPlaneId,
+        houseOutlineId: command.houseOutlineId,
+        edgeIndex: selectEaveEdgeIndex(houseOutline.points, command.directionRad),
+        widthMm: command.gutterWidthMm,
+        dropMm: command.gutterDropMm,
       });
       return finalize(draft);
     }
@@ -112,6 +132,22 @@ export function applyCommand(document: ProjectDocument, command: DocumentCommand
         return { ok: false, error: `Unknown roof plane id: ${command.roofPlaneId}` };
       }
       Object.assign(roofPlane, command.patch);
+      if (command.patch.directionRad !== undefined) {
+        const houseOutline = draft.site.houseOutlines.find((o) => o.id === roofPlane.houseOutlineId);
+        const gutter = draft.site.gutters.find((g) => g.roofPlaneId === roofPlane.id);
+        if (houseOutline && gutter) {
+          gutter.edgeIndex = selectEaveEdgeIndex(houseOutline.points, roofPlane.directionRad);
+        }
+      }
+      return finalize(draft);
+    }
+
+    case "update-gutter": {
+      const gutter = draft.site.gutters.find((g) => g.id === command.gutterId);
+      if (!gutter) {
+        return { ok: false, error: `Unknown gutter id: ${command.gutterId}` };
+      }
+      Object.assign(gutter, command.patch);
       return finalize(draft);
     }
   }

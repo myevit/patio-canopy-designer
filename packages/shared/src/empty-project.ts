@@ -14,7 +14,7 @@ export function createEmptyProjectDocument({
     revision: 0,
     metadata: { name, createdAt },
     displayUnits: "mm",
-    site: { houseOutlines: [], roofPlanes: [], patioOutlines: [] },
+    site: { houseOutlines: [], roofPlanes: [], gutters: [], patioOutlines: [] },
     anchors: [],
     sections: [],
     materials: [],

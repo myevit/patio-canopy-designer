@@ -20,14 +20,18 @@ function describeInteraction(interaction: InteractionState): string {
 export interface StatusBarProps {
   tool: ToolId;
   interaction: InteractionState;
+  persistenceError?: string | null;
 }
 
-export function StatusBar({ tool, interaction }: StatusBarProps) {
+export function StatusBar({ tool, interaction, persistenceError = null }: StatusBarProps) {
   return (
     <footer role="status" aria-label="Status" className="status-bar">
       <p className="status-bar__mode">
         Tool: {TOOL_LABELS[tool]} &middot; State: {describeInteraction(interaction)}
       </p>
+      {persistenceError && (
+        <p className="status-bar__persistence-error">Persistence error: {persistenceError}</p>
+      )}
       <p className="status-bar__disclaimer">{DISCLAIMER_TEXT}</p>
     </footer>
   );

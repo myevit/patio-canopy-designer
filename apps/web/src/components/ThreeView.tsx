@@ -2,8 +2,9 @@ import { useMemo } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, type ThreeEvent } from "@react-three/fiber";
-import type { SceneRoofPlane, ScenePrimitives } from "@canopy/geometry";
+import type { SceneGutter, SceneRoofPlane, ScenePrimitives } from "@canopy/geometry";
 import { memberTransform, toThreeVector, wallTransform } from "../scene/three-transforms.js";
+import { triangulateFootprint } from "../scene/triangulate-polygon.js";
 
 function RoofPlaneMesh({ roofPlane }: { roofPlane: SceneRoofPlane }) {
   const geometry = useMemo(() => {
@@ -16,11 +17,8 @@ function RoofPlaneMesh({ roofPlane }: { roofPlane: SceneRoofPlane }) {
       positions[index * 3 + 2] = z;
     });
     geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    const indices: number[] = [];
-    for (let i = 1; i < roofPlane.outline.length - 1; i += 1) {
-      indices.push(0, i, i + 1);
-    }
-    geom.setIndex(indices);
+    const triangles = triangulateFootprint(roofPlane.outline);
+    geom.setIndex(triangles.flat());
     geom.computeVertexNormals();
     return geom;
   }, [roofPlane]);
@@ -28,6 +26,20 @@ function RoofPlaneMesh({ roofPlane }: { roofPlane: SceneRoofPlane }) {
   return (
     <mesh data-testid={`scene-roof-plane-${roofPlane.id}`} geometry={geometry}>
       <meshStandardMaterial color="#a5553a" side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
+function GutterMesh({ gutter }: { gutter: SceneGutter }) {
+  const transform = memberTransform(gutter.start, gutter.end);
+  return (
+    <mesh
+      data-testid={`scene-gutter-${gutter.id}`}
+      position={transform.center}
+      quaternion={transform.quaternion}
+    >
+      <boxGeometry args={[gutter.widthMm, transform.length, gutter.widthMm]} />
+      <meshStandardMaterial color="#6b6b6b" />
     </mesh>
   );
 }
@@ -71,6 +83,10 @@ export function ThreeView({ scene, selectedObjectId, onSelect }: ThreeViewProps)
 
       {scene.roofPlanes.map((roofPlane) => (
         <RoofPlaneMesh key={roofPlane.id} roofPlane={roofPlane} />
+      ))}
+
+      {scene.gutters.map((gutter) => (
+        <GutterMesh key={gutter.id} gutter={gutter} />
       ))}
 
       {scene.posts.map((post) => {

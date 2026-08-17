@@ -1,18 +1,17 @@
-import type { RoofPlane, Vector3Mm } from "@canopy/shared";
+import type { Gutter, RoofPlane, Vector3Mm } from "@canopy/shared";
 
-type RoofPlaneSlope = Pick<RoofPlane, "referenceElevationMm" | "pitchDeg" | "directionRad">;
+type RoofPlaneSlope = Pick<RoofPlane, "referenceElevationMm" | "pitchRad" | "directionRad">;
 
 function projectionsAlong(points: Vector3Mm[], dirX: number, dirY: number): number[] {
   return points.map((p) => p.x * dirX + p.y * dirY);
 }
 
 export function deriveRoofOutline(footprint: Vector3Mm[], roofPlane: RoofPlaneSlope): Vector3Mm[] {
-  const pitchRad = (roofPlane.pitchDeg * Math.PI) / 180;
   const dirX = Math.cos(roofPlane.directionRad);
   const dirY = Math.sin(roofPlane.directionRad);
   const projections = projectionsAlong(footprint, dirX, dirY);
   const dMax = Math.max(...projections);
-  const rise = Math.tan(pitchRad);
+  const rise = Math.tan(roofPlane.pitchRad);
 
   return footprint.map((point, index) => ({
     x: point.x,
@@ -22,31 +21,37 @@ export function deriveRoofOutline(footprint: Vector3Mm[], roofPlane: RoofPlaneSl
 }
 
 export interface DerivedGutter {
+  id: string;
+  roofPlaneId: string;
   start: Vector3Mm;
   end: Vector3Mm;
   widthMm: number;
   dropMm: number;
 }
 
-export function deriveGutter(footprint: Vector3Mm[], roofPlane: RoofPlane): DerivedGutter {
-  const dirX = Math.cos(roofPlane.directionRad);
-  const dirY = Math.sin(roofPlane.directionRad);
-  const projections = projectionsAlong(footprint, dirX, dirY);
+/**
+ * A gutter's endpoints are the two vertices of its referenced house-outline
+ * edge, both held at the roof plane's reference elevation. Because the
+ * elevation is fixed rather than re-derived from the sloped roof surface,
+ * both endpoints share the same elevation regardless of how the roof
+ * direction relates to that edge.
+ */
+export function deriveGutter(
+  houseOutlinePoints: Vector3Mm[],
+  gutter: Gutter,
+  referenceElevationMm: number,
+): DerivedGutter {
+  const n = houseOutlinePoints.length;
+  const edgeIndex = ((gutter.edgeIndex % n) + n) % n;
+  const a = houseOutlinePoints[edgeIndex]!;
+  const b = houseOutlinePoints[(edgeIndex + 1) % n]!;
 
-  let maxIndex = 0;
-  for (let i = 1; i < projections.length; i += 1) {
-    if (projections[i]! > projections[maxIndex]!) maxIndex = i;
-  }
-  const n = footprint.length;
-  const prevIndex = (maxIndex - 1 + n) % n;
-  const nextIndex = (maxIndex + 1) % n;
-  const neighborIndex = projections[prevIndex]! >= projections[nextIndex]! ? prevIndex : nextIndex;
-
-  const outline = deriveRoofOutline(footprint, roofPlane);
   return {
-    start: outline[maxIndex]!,
-    end: outline[neighborIndex]!,
-    widthMm: roofPlane.gutter.widthMm,
-    dropMm: roofPlane.gutter.dropMm,
+    id: gutter.id,
+    roofPlaneId: gutter.roofPlaneId,
+    start: { x: a.x, y: a.y, z: referenceElevationMm },
+    end: { x: b.x, y: b.y, z: referenceElevationMm },
+    widthMm: gutter.widthMm,
+    dropMm: gutter.dropMm,
   };
 }

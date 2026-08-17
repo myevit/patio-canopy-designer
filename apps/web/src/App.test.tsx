@@ -111,6 +111,47 @@ describe("App", () => {
   });
 });
 
+describe("App: keyboard shortcuts", () => {
+  it("Backspace pressed while a numeric field is focused does not delete the selected vertex", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(screen.getByTestId("house-vertex-house-outline-1-0"));
+    const xField = screen.getByLabelText(/vertex x/i);
+    fireEvent.change(xField, { target: { value: "-999" } });
+    // Backspace dispatched with the numeric field itself as the event target
+    // must be ignored by the global shortcut handler.
+    fireEvent.keyDown(xField, { key: "Backspace" });
+    expect(screen.getByTestId("house-vertex-house-outline-1-0")).toBeInTheDocument();
+    expect(screen.getByTestId("house-vertex-house-outline-1-1")).toBeInTheDocument();
+    expect(screen.getByTestId("house-vertex-house-outline-1-2")).toBeInTheDocument();
+    expect(screen.getByTestId("house-vertex-house-outline-1-3")).toBeInTheDocument();
+  });
+
+  it("moving a vertex then deleting it via Backspace (outside any input) uses the latest document, not a stale one", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(screen.getByTestId("house-vertex-house-outline-1-0"));
+    const xField = screen.getByLabelText(/vertex x/i);
+    fireEvent.change(xField, { target: { value: "-999" } });
+    fireEvent.blur(xField);
+
+    // Delete the (still-selected) moved vertex via a global Backspace whose
+    // event target is not an editable element.
+    fireEvent.keyDown(window, { key: "Backspace" });
+
+    expect(screen.queryByTestId("house-vertex-house-outline-1-3")).not.toBeInTheDocument();
+    expect(screen.getByTestId("house-vertex-house-outline-1-0")).toBeInTheDocument();
+    expect(screen.getByTestId("house-vertex-house-outline-1-1")).toBeInTheDocument();
+    expect(screen.getByTestId("house-vertex-house-outline-1-2")).toBeInTheDocument();
+
+    // Undo the delete: a correct (non-stale) dispatch restores the moved
+    // document, so vertex 0 reappears at its moved x, not its original x.
+    await user.click(screen.getByRole("button", { name: /undo/i }));
+    fireEvent.click(screen.getByTestId("house-vertex-house-outline-1-0"));
+    expect(screen.getByLabelText(/vertex x/i)).toHaveValue(-999);
+  });
+});
+
 describe("App: house outline authoring", () => {
   function mockRect() {
     const rect = { left: 0, top: 0, width: 8400, height: 5200 };
@@ -123,6 +164,33 @@ describe("App: house outline authoring", () => {
       toJSON: () => rect,
     } as DOMRect);
   }
+
+  it("draws a closed house outline entirely via the keyboard-operable coordinate-entry panel", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "House" }));
+    const before = screen.getAllByLabelText(/^House outline/).length;
+
+    async function addPoint(x: string, y: string) {
+      await user.clear(screen.getByLabelText(/^x \(mm\)/i));
+      await user.type(screen.getByLabelText(/^x \(mm\)/i), x);
+      await user.clear(screen.getByLabelText(/^y \(mm\)/i));
+      await user.type(screen.getByLabelText(/^y \(mm\)/i), y);
+      await user.click(screen.getByRole("button", { name: /^add point$/i }));
+    }
+
+    await addPoint("0", "0");
+    await addPoint("4000", "0");
+    await addPoint("4000", "3000");
+
+    const closeButton = screen.getByRole("button", { name: /close outline/i });
+    expect(closeButton).toBeEnabled();
+    await user.click(closeButton);
+
+    expect(screen.getByRole("button", { name: "Select" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getAllByLabelText(/^House outline/).length).toBe(before + 1);
+  });
 
   it("draws a closed house outline and adds a roof plane to it", async () => {
     mockRect();
@@ -217,11 +285,14 @@ describe("App: undo/redo and project menu", () => {
     const user = userEvent.setup();
     URL.createObjectURL = vi.fn(() => "blob:mock");
     URL.revokeObjectURL = vi.fn();
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 
     renderApp();
     await user.click(screen.getByRole("button", { name: "Export" }));
 
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(clickSpy).toHaveBeenCalledOnce();
+    clickSpy.mockRestore();
   });
 
   it("Import replaces the current project with the uploaded document", async () => {

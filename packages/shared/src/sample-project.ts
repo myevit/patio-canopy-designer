@@ -32,9 +32,18 @@ const document: ProjectDocument = {
         id: "roof-plane-1",
         houseOutlineId: "house-outline-1",
         referenceElevationMm: 2700,
-        pitchDeg: 5,
+        pitchRad: (5 * Math.PI) / 180,
         directionRad: Math.PI / 2,
-        gutter: { widthMm: 125, dropMm: 60 },
+      },
+    ],
+    gutters: [
+      {
+        id: "gutter-1",
+        roofPlaneId: "roof-plane-1",
+        houseOutlineId: "house-outline-1",
+        edgeIndex: 2,
+        widthMm: 125,
+        dropMm: 60,
       },
     ],
     patioOutlines: [

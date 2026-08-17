@@ -248,6 +248,19 @@ export function PlanView({
           data-testid={`roof-plane-${roofPlane.id}`}
           className="plan-view__roof"
           points={toPoints(roofPlane.outline)}
+          style={{ pointerEvents: "none" }}
+        />
+      ))}
+      {scene.gutters.map((gutter) => (
+        <line
+          key={gutter.id}
+          data-testid={`gutter-${gutter.id}`}
+          className="plan-view__gutter"
+          x1={gutter.start.x}
+          y1={gutter.start.y}
+          x2={gutter.end.x}
+          y2={gutter.end.y}
+          style={{ pointerEvents: "none" }}
         />
       ))}
       {scene.members.map((member) => (

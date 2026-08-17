@@ -1,6 +1,9 @@
 import { z } from "zod";
+import { validateOutline } from "./outline-validation.js";
 
 export const CURRENT_SCHEMA_VERSION = 1 as const;
+
+const MAX_PITCH_RAD = (89 * Math.PI) / 180;
 
 const finiteNumber = z.number().finite();
 
@@ -91,18 +94,21 @@ const HouseOutlineSchema = z.object({
   points: z.array(Vector3MmSchema).min(3),
 });
 
-const GutterSchema = z.object({
-  widthMm: finiteNumber.positive(),
-  dropMm: finiteNumber.nonnegative(),
-});
-
 const RoofPlaneSchema = z.object({
   id: z.string().min(1),
   houseOutlineId: z.string().min(1),
   referenceElevationMm: finiteNumber,
-  pitchDeg: finiteNumber.min(0).max(89),
+  pitchRad: finiteNumber.min(0).max(MAX_PITCH_RAD),
   directionRad: finiteNumber,
-  gutter: GutterSchema,
+});
+
+const GutterSchema = z.object({
+  id: z.string().min(1),
+  roofPlaneId: z.string().min(1),
+  houseOutlineId: z.string().min(1),
+  edgeIndex: z.number().int().nonnegative(),
+  widthMm: finiteNumber.positive(),
+  dropMm: finiteNumber.nonnegative(),
 });
 
 const PatioOutlineSchema = z.object({
@@ -113,6 +119,7 @@ const PatioOutlineSchema = z.object({
 const SiteSchema = z.object({
   houseOutlines: z.array(HouseOutlineSchema),
   roofPlanes: z.array(RoofPlaneSchema),
+  gutters: z.array(GutterSchema),
   patioOutlines: z.array(PatioOutlineSchema),
 });
 
@@ -156,7 +163,19 @@ export const ProjectDocumentSchema = z
 
     requireUniqueIds(doc.site.houseOutlines, ["site", "houseOutlines"], "house outline");
     requireUniqueIds(doc.site.roofPlanes, ["site", "roofPlanes"], "roof plane");
+    requireUniqueIds(doc.site.gutters, ["site", "gutters"], "gutter");
     requireUniqueIds(doc.site.patioOutlines, ["site", "patioOutlines"], "patio outline");
+
+    doc.site.houseOutlines.forEach((houseOutline, index) => {
+      const validation = validateOutline(houseOutline.points);
+      if (!validation.valid) {
+        ctx.addIssue({
+          code: "custom",
+          message: validation.reason,
+          path: ["site", "houseOutlines", index, "points"],
+        });
+      }
+    });
     requireUniqueIds(doc.anchors, ["anchors"], "anchor");
     requireUniqueIds(doc.sections, ["sections"], "section");
     requireUniqueIds(doc.materials, ["materials"], "material");
@@ -187,13 +206,54 @@ export const ProjectDocumentSchema = z
     requireGloballyUniqueSelectableIds(doc.members, "members");
     requireGloballyUniqueSelectableIds(doc.joints, "joints");
 
-    const houseOutlineIds = new Set(doc.site.houseOutlines.map((h) => h.id));
+    const houseOutlinesById = new Map(doc.site.houseOutlines.map((h) => [h.id, h]));
+    const roofedHouseOutlineIds = new Set<string>();
     doc.site.roofPlanes.forEach((roofPlane, index) => {
-      if (!houseOutlineIds.has(roofPlane.houseOutlineId)) {
+      if (!houseOutlinesById.has(roofPlane.houseOutlineId)) {
         ctx.addIssue({
           code: "custom",
           message: `Unknown house outline id: ${roofPlane.houseOutlineId}`,
           path: ["site", "roofPlanes", index, "houseOutlineId"],
+        });
+      } else if (roofedHouseOutlineIds.has(roofPlane.houseOutlineId)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `House outline ${roofPlane.houseOutlineId} already has a roof plane.`,
+          path: ["site", "roofPlanes", index, "houseOutlineId"],
+        });
+      } else {
+        roofedHouseOutlineIds.add(roofPlane.houseOutlineId);
+      }
+    });
+
+    const roofPlanesById = new Map(doc.site.roofPlanes.map((r) => [r.id, r]));
+    doc.site.gutters.forEach((gutter, index) => {
+      const roofPlane = roofPlanesById.get(gutter.roofPlaneId);
+      if (!roofPlane) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Unknown roof plane id: ${gutter.roofPlaneId}`,
+          path: ["site", "gutters", index, "roofPlaneId"],
+        });
+      } else if (roofPlane.houseOutlineId !== gutter.houseOutlineId) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Gutter house outline id does not match roof plane ${gutter.roofPlaneId}`,
+          path: ["site", "gutters", index, "houseOutlineId"],
+        });
+      }
+      const houseOutline = houseOutlinesById.get(gutter.houseOutlineId);
+      if (!houseOutline) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Unknown house outline id: ${gutter.houseOutlineId}`,
+          path: ["site", "gutters", index, "houseOutlineId"],
+        });
+      } else if (gutter.edgeIndex >= houseOutline.points.length) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Gutter edge index ${gutter.edgeIndex} is out of range for house outline ${gutter.houseOutlineId}`,
+          path: ["site", "gutters", index, "edgeIndex"],
         });
       }
     });

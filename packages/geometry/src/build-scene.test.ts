@@ -24,9 +24,18 @@ function fixtureDocument(): ProjectDocument {
           id: "roof-1",
           houseOutlineId: "house-1",
           referenceElevationMm: 2700,
-          pitchDeg: 10,
+          pitchRad: (10 * Math.PI) / 180,
           directionRad: Math.PI / 2,
-          gutter: { widthMm: 100, dropMm: 50 },
+        },
+      ],
+      gutters: [
+        {
+          id: "gutter-1",
+          roofPlaneId: "roof-1",
+          houseOutlineId: "house-1",
+          edgeIndex: 1,
+          widthMm: 100,
+          dropMm: 50,
         },
       ],
       patioOutlines: [
@@ -128,19 +137,27 @@ describe("buildScene", () => {
     ]);
   });
 
-  it("derives the roof plane's 3D outline and gutter from its house outline and pitch", () => {
+  it("derives the roof plane's 3D outline from its house outline and pitch", () => {
     const scene = buildScene(fixtureDocument());
     expect(scene.roofPlanes).toHaveLength(1);
     const [roofPlane] = scene.roofPlanes;
     // The (100,100) vertex has the greatest projection along +y, so it is the eave.
     expect(roofPlane!.outline[2]).toEqual({ x: 100, y: 100, z: 2700 });
     expect(roofPlane!.outline[0]!.z).toBeGreaterThan(2700);
-    expect(roofPlane!.gutter.widthMm).toBe(100);
-    expect(roofPlane!.gutter.dropMm).toBe(50);
-    expect(roofPlane!.gutter.start.z).toBe(2700);
     expect(roofPlane!.houseOutlineId).toBe("house-1");
     expect(roofPlane!.referenceElevationMm).toBe(2700);
-    expect(roofPlane!.pitchDeg).toBe(10);
+    expect(roofPlane!.pitchRad).toBeCloseTo((10 * Math.PI) / 180, 10);
+  });
+
+  it("derives a gutter from its referenced edge, sharing the reference elevation at both ends", () => {
+    const scene = buildScene(fixtureDocument());
+    expect(scene.gutters).toHaveLength(1);
+    const [gutter] = scene.gutters;
+    expect(gutter!.roofPlaneId).toBe("roof-1");
+    expect(gutter!.widthMm).toBe(100);
+    expect(gutter!.dropMm).toBe(50);
+    expect(gutter!.start.z).toBe(2700);
+    expect(gutter!.end.z).toBe(2700);
   });
 
   it("builds one wall per house outline edge, rising to the roof's reference elevation", () => {
@@ -156,6 +173,33 @@ describe("buildScene", () => {
       end: { x: 100, y: 0, z: 0 },
       heightMm: 2700,
     });
+  });
+
+  it("builds walls for a house outline that has no roof plane, using a default height", () => {
+    const doc = fixtureDocument();
+    doc.site.roofPlanes = [];
+    doc.site.gutters = [];
+    const scene = buildScene(doc);
+    expect(scene.walls).toHaveLength(3);
+    expect(scene.roofPlanes).toHaveLength(0);
+    for (const wall of scene.walls) {
+      expect(wall.heightMm).toBeGreaterThan(0);
+    }
+  });
+
+  it("builds exactly one set of walls per house outline even with multiple house outlines", () => {
+    const doc = fixtureDocument();
+    doc.site.houseOutlines.push({
+      id: "house-2",
+      points: [
+        { x: 500, y: 500, z: 0 },
+        { x: 600, y: 500, z: 0 },
+        { x: 600, y: 600, z: 0 },
+      ],
+    });
+    const scene = buildScene(doc);
+    expect(scene.walls).toHaveLength(6);
+    expect(scene.walls.filter((w) => w.id.startsWith("house-2"))).toHaveLength(3);
   });
 
   it("throws a descriptive error when a member references a section that cannot be resolved", () => {
@@ -175,6 +219,7 @@ describe("buildScene", () => {
     expect(scene.joints).toHaveLength(SAMPLE_PROJECT.joints.length);
     expect(scene.houseOutlines).toHaveLength(1);
     expect(scene.roofPlanes).toHaveLength(1);
+    expect(scene.gutters).toHaveLength(1);
     expect(scene.patioOutlines).toHaveLength(1);
   });
 });

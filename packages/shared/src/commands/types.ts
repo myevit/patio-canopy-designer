@@ -1,4 +1,4 @@
-import type { Gutter, ProjectDocument } from "../design-schema.js";
+import type { ProjectDocument } from "../design-schema.js";
 import type { Vector3Mm } from "../units.js";
 
 export type DocumentCommand =
@@ -11,18 +11,27 @@ export type DocumentCommand =
       roofPlaneId: string;
       houseOutlineId: string;
       referenceElevationMm: number;
-      pitchDeg: number;
+      pitchRad: number;
       directionRad: number;
-      gutter: Gutter;
+      gutterId: string;
+      gutterWidthMm: number;
+      gutterDropMm: number;
     }
   | {
       type: "update-roof-plane";
       roofPlaneId: string;
       patch: Partial<{
         referenceElevationMm: number;
-        pitchDeg: number;
+        pitchRad: number;
         directionRad: number;
-        gutter: Gutter;
+      }>;
+    }
+  | {
+      type: "update-gutter";
+      gutterId: string;
+      patch: Partial<{
+        widthMm: number;
+        dropMm: number;
       }>;
     };
 

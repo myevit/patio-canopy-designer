@@ -11,7 +11,7 @@ function minimalDocument(): ProjectDocument {
     revision: 1,
     metadata: { name: "Empty project", createdAt: "2026-08-16T00:00:00.000Z" },
     displayUnits: "mm",
-    site: { houseOutlines: [], roofPlanes: [], patioOutlines: [] },
+    site: { houseOutlines: [], roofPlanes: [], gutters: [], patioOutlines: [] },
     anchors: [],
     sections: [],
     materials: [],
@@ -20,6 +20,20 @@ function minimalDocument(): ProjectDocument {
     fanFields: [],
     joints: [],
   };
+}
+
+function rectanglePoints() {
+  return [
+    { x: 0, y: 0, z: 0 },
+    { x: 4000, y: 0, z: 0 },
+    { x: 4000, y: 3000, z: 0 },
+    { x: 0, y: 3000, z: 0 },
+  ];
+}
+
+function withHouseOutline(doc: ProjectDocument): ProjectDocument {
+  doc.site.houseOutlines.push({ id: "house-1", points: rectanglePoints() });
+  return doc;
 }
 
 describe("parseProjectDocument", () => {
@@ -128,55 +142,99 @@ describe("parseProjectDocument", () => {
       id: "roof-1",
       houseOutlineId: "house-missing",
       referenceElevationMm: 2690,
-      pitchDeg: 10,
+      pitchRad: (10 * Math.PI) / 180,
       directionRad: 0,
-      gutter: { widthMm: 100, dropMm: 50 },
     });
     const result = parseProjectDocument(doc);
     expect(result.success).toBe(false);
   });
 
   it("rejects a roof plane pitch of 90 degrees or more", () => {
+    const doc = withHouseOutline(minimalDocument());
+    doc.site.roofPlanes.push({
+      id: "roof-1",
+      houseOutlineId: "house-1",
+      referenceElevationMm: 2690,
+      pitchRad: Math.PI / 2,
+      directionRad: 0,
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a second roof plane attached to the same house outline", () => {
+    const doc = withHouseOutline(minimalDocument());
+    doc.site.roofPlanes.push(
+      {
+        id: "roof-1",
+        houseOutlineId: "house-1",
+        referenceElevationMm: 2690,
+        pitchRad: (10 * Math.PI) / 180,
+        directionRad: 0,
+      },
+      {
+        id: "roof-2",
+        houseOutlineId: "house-1",
+        referenceElevationMm: 2400,
+        pitchRad: (8 * Math.PI) / 180,
+        directionRad: 0,
+      },
+    );
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a self-intersecting house outline", () => {
     const doc = minimalDocument();
     doc.site.houseOutlines.push({
       id: "house-1",
       points: [
         { x: 0, y: 0, z: 0 },
-        { x: 4000, y: 0, z: 0 },
         { x: 4000, y: 3000, z: 0 },
+        { x: 4000, y: 0, z: 0 },
         { x: 0, y: 3000, z: 0 },
       ],
     });
-    doc.site.roofPlanes.push({
-      id: "roof-1",
-      houseOutlineId: "house-1",
-      referenceElevationMm: 2690,
-      pitchDeg: 90,
-      directionRad: 0,
-      gutter: { widthMm: 100, dropMm: 50 },
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a zero-area house outline", () => {
+    const doc = minimalDocument();
+    doc.site.houseOutlines.push({
+      id: "house-1",
+      points: [
+        { x: 0, y: 0, z: 0 },
+        { x: 1000, y: 0, z: 0 },
+        { x: 2000, y: 0, z: 0 },
+      ],
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a house outline with a duplicated vertex", () => {
+    const doc = minimalDocument();
+    doc.site.houseOutlines.push({
+      id: "house-1",
+      points: [
+        { x: 0, y: 0, z: 0 },
+        { x: 0, y: 0, z: 0 },
+        { x: 4000, y: 3000, z: 0 },
+      ],
     });
     const result = parseProjectDocument(doc);
     expect(result.success).toBe(false);
   });
 
   it("accepts a roof plane with an exact 2690 mm reference elevation attached to a house outline", () => {
-    const doc = minimalDocument();
-    doc.site.houseOutlines.push({
-      id: "house-1",
-      points: [
-        { x: 0, y: 0, z: 0 },
-        { x: 4000, y: 0, z: 0 },
-        { x: 4000, y: 3000, z: 0 },
-        { x: 0, y: 3000, z: 0 },
-      ],
-    });
+    const doc = withHouseOutline(minimalDocument());
     doc.site.roofPlanes.push({
       id: "roof-1",
       houseOutlineId: "house-1",
       referenceElevationMm: 2690,
-      pitchDeg: 12,
+      pitchRad: (12 * Math.PI) / 180,
       directionRad: 0,
-      gutter: { widthMm: 100, dropMm: 50 },
     });
     const result = parseProjectDocument(doc);
     expect(result.success).toBe(true);
@@ -184,6 +242,62 @@ describe("parseProjectDocument", () => {
       const [roofPlane] = result.data.site.roofPlanes;
       expect(roofPlane!.referenceElevationMm).toBe(2690);
     }
+  });
+
+  it("accepts a gutter referencing a valid roof plane, house outline, and edge index", () => {
+    const doc = withHouseOutline(minimalDocument());
+    doc.site.roofPlanes.push({
+      id: "roof-1",
+      houseOutlineId: "house-1",
+      referenceElevationMm: 2690,
+      pitchRad: (12 * Math.PI) / 180,
+      directionRad: Math.PI / 2,
+    });
+    doc.site.gutters.push({
+      id: "gutter-1",
+      roofPlaneId: "roof-1",
+      houseOutlineId: "house-1",
+      edgeIndex: 2,
+      widthMm: 100,
+      dropMm: 50,
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a gutter referencing an unknown roof plane", () => {
+    const doc = withHouseOutline(minimalDocument());
+    doc.site.gutters.push({
+      id: "gutter-1",
+      roofPlaneId: "missing-roof",
+      houseOutlineId: "house-1",
+      edgeIndex: 0,
+      widthMm: 100,
+      dropMm: 50,
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a gutter edge index out of range for its house outline", () => {
+    const doc = withHouseOutline(minimalDocument());
+    doc.site.roofPlanes.push({
+      id: "roof-1",
+      houseOutlineId: "house-1",
+      referenceElevationMm: 2690,
+      pitchRad: (12 * Math.PI) / 180,
+      directionRad: 0,
+    });
+    doc.site.gutters.push({
+      id: "gutter-1",
+      roofPlaneId: "roof-1",
+      houseOutlineId: "house-1",
+      edgeIndex: 99,
+      widthMm: 100,
+      dropMm: 50,
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(false);
   });
 
   it("accepts a document with a fully cross-referenced post", () => {

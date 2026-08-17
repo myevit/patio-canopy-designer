@@ -2,6 +2,9 @@ import type { Anchor, HouseOutline, ProjectDocument, Section, Vector3Mm } from "
 import { deriveGutter, deriveRoofOutline } from "./derive-roof.js";
 import type { SceneWall, ScenePrimitives } from "./scene-types.js";
 
+/** Wall height used for a house outline that has no roof plane yet. */
+const DEFAULT_WALL_HEIGHT_MM = 2400;
+
 function indexById<T extends { id: string }>(items: T[]): Map<string, T> {
   return new Map(items.map((item) => [item.id, item]));
 }
@@ -38,20 +41,38 @@ export function buildScene(document: ProjectDocument): ScenePrimitives {
   const anchors = indexById(document.anchors);
   const sections = indexById(document.sections);
   const houseOutlines = indexById(document.site.houseOutlines);
+  const roofPlanesByHouseOutline = new Map(
+    document.site.roofPlanes.map((roofPlane) => [roofPlane.houseOutlineId, roofPlane]),
+  );
 
-  const walls: SceneWall[] = [];
+  // Exactly one set of walls per house outline, independent of whether (or
+  // how many) roof planes reference it.
+  const walls: SceneWall[] = document.site.houseOutlines.flatMap((houseOutline) => {
+    const roofPlane = roofPlanesByHouseOutline.get(houseOutline.id);
+    const heightMm = roofPlane ? roofPlane.referenceElevationMm : DEFAULT_WALL_HEIGHT_MM;
+    return buildWalls(houseOutline, heightMm);
+  });
+
   const roofPlanes = document.site.roofPlanes.map((roofPlane) => {
     const houseOutline = resolve(houseOutlines, roofPlane.houseOutlineId, "house outline");
-    walls.push(...buildWalls(houseOutline, roofPlane.referenceElevationMm));
     return {
       id: roofPlane.id,
       kind: "roof-plane" as const,
       houseOutlineId: roofPlane.houseOutlineId,
       referenceElevationMm: roofPlane.referenceElevationMm,
-      pitchDeg: roofPlane.pitchDeg,
+      pitchRad: roofPlane.pitchRad,
       directionRad: roofPlane.directionRad,
       outline: deriveRoofOutline(houseOutline.points, roofPlane),
-      gutter: deriveGutter(houseOutline.points, roofPlane),
+    };
+  });
+
+  const roofPlanesById = indexById(document.site.roofPlanes);
+  const gutters = document.site.gutters.map((gutter) => {
+    const houseOutline = resolve(houseOutlines, gutter.houseOutlineId, "house outline");
+    const roofPlane = resolve(roofPlanesById, gutter.roofPlaneId, "roof plane");
+    return {
+      kind: "gutter" as const,
+      ...deriveGutter(houseOutline.points, gutter, roofPlane.referenceElevationMm),
     };
   });
 
@@ -62,6 +83,7 @@ export function buildScene(document: ProjectDocument): ScenePrimitives {
       points: outline.points,
     })),
     roofPlanes,
+    gutters,
     walls,
     patioOutlines: document.site.patioOutlines.map((outline) => ({
       id: outline.id,

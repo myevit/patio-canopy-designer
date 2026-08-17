@@ -168,17 +168,24 @@ describe("applyCommand: roof plane", () => {
     return result.document;
   }
 
-  it("adds a roof plane referencing a house outline", () => {
-    const doc = withOutline();
-    const result = applyCommand(doc, {
+  function addRoofPlane(doc: ProjectDocument, overrides: Partial<Record<string, unknown>> = {}) {
+    return applyCommand(doc, {
       type: "add-roof-plane",
       roofPlaneId: "roof-1",
       houseOutlineId: "house-1",
       referenceElevationMm: 2690,
-      pitchDeg: 10,
-      directionRad: 0,
-      gutter: { widthMm: 100, dropMm: 50 },
-    });
+      pitchRad: (10 * Math.PI) / 180,
+      directionRad: Math.PI / 2,
+      gutterId: "gutter-1",
+      gutterWidthMm: 100,
+      gutterDropMm: 50,
+      ...overrides,
+    } as never);
+  }
+
+  it("adds a roof plane referencing a house outline", () => {
+    const doc = withOutline();
+    const result = addRoofPlane(doc);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.document.site.roofPlanes).toHaveLength(1);
@@ -186,66 +193,54 @@ describe("applyCommand: roof plane", () => {
     }
   });
 
+  it("also creates a gutter attached to the eave edge for the given direction", () => {
+    const doc = withOutline();
+    const result = addRoofPlane(doc);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.site.gutters).toHaveLength(1);
+      const gutter = result.document.site.gutters[0]!;
+      expect(gutter.roofPlaneId).toBe("roof-1");
+      expect(gutter.houseOutlineId).toBe("house-1");
+      // directionRad = +y, so the y=3000 edge (vertices 2,3) is the eave.
+      expect(gutter.edgeIndex).toBe(2);
+      expect(gutter.widthMm).toBe(100);
+      expect(gutter.dropMm).toBe(50);
+    }
+  });
+
   it("rejects a roof plane referencing a missing house outline", () => {
     const doc = baseDoc();
-    const result = applyCommand(doc, {
-      type: "add-roof-plane",
-      roofPlaneId: "roof-1",
-      houseOutlineId: "missing",
-      referenceElevationMm: 2690,
-      pitchDeg: 10,
-      directionRad: 0,
-      gutter: { widthMm: 100, dropMm: 50 },
-    });
+    const result = addRoofPlane(doc, { houseOutlineId: "missing" });
     expect(result.ok).toBe(false);
   });
 
   it("rejects a second roof plane on the same house outline", () => {
     const doc = withOutline();
-    const first = applyCommand(doc, {
-      type: "add-roof-plane",
-      roofPlaneId: "roof-1",
-      houseOutlineId: "house-1",
-      referenceElevationMm: 2690,
-      pitchDeg: 10,
-      directionRad: 0,
-      gutter: { widthMm: 100, dropMm: 50 },
-    });
+    const first = addRoofPlane(doc);
     if (!first.ok) throw new Error("setup failed");
-    const second = applyCommand(first.document, {
-      type: "add-roof-plane",
+    const second = addRoofPlane(first.document, {
       roofPlaneId: "roof-2",
-      houseOutlineId: "house-1",
+      gutterId: "gutter-2",
       referenceElevationMm: 2400,
-      pitchDeg: 8,
-      directionRad: 0,
-      gutter: { widthMm: 100, dropMm: 50 },
+      pitchRad: (8 * Math.PI) / 180,
     });
     expect(second.ok).toBe(false);
   });
 
   it("updates roof plane fields with a patch", () => {
     const doc = withOutline();
-    const added = applyCommand(doc, {
-      type: "add-roof-plane",
-      roofPlaneId: "roof-1",
-      houseOutlineId: "house-1",
-      referenceElevationMm: 2690,
-      pitchDeg: 10,
-      directionRad: 0,
-      gutter: { widthMm: 100, dropMm: 50 },
-    });
+    const added = addRoofPlane(doc);
     if (!added.ok) throw new Error("setup failed");
     const result = applyCommand(added.document, {
       type: "update-roof-plane",
       roofPlaneId: "roof-1",
-      patch: { pitchDeg: 15, gutter: { widthMm: 150, dropMm: 75 } },
+      patch: { pitchRad: (15 * Math.PI) / 180 },
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
       const roofPlane = result.document.site.roofPlanes[0]!;
-      expect(roofPlane.pitchDeg).toBe(15);
-      expect(roofPlane.gutter).toEqual({ widthMm: 150, dropMm: 75 });
+      expect(roofPlane.pitchRad).toBeCloseTo((15 * Math.PI) / 180, 10);
       expect(roofPlane.referenceElevationMm).toBe(2690);
     }
   });
@@ -255,27 +250,86 @@ describe("applyCommand: roof plane", () => {
     const result = applyCommand(doc, {
       type: "update-roof-plane",
       roofPlaneId: "missing",
-      patch: { pitchDeg: 15 },
+      patch: { pitchRad: (15 * Math.PI) / 180 },
     });
     expect(result.ok).toBe(false);
   });
 
   it("rejects a pitch update outside the valid range", () => {
     const doc = withOutline();
-    const added = applyCommand(doc, {
-      type: "add-roof-plane",
-      roofPlaneId: "roof-1",
-      houseOutlineId: "house-1",
-      referenceElevationMm: 2690,
-      pitchDeg: 10,
-      directionRad: 0,
-      gutter: { widthMm: 100, dropMm: 50 },
-    });
+    const added = addRoofPlane(doc);
     if (!added.ok) throw new Error("setup failed");
     const result = applyCommand(added.document, {
       type: "update-roof-plane",
       roofPlaneId: "roof-1",
-      patch: { pitchDeg: 95 },
+      patch: { pitchRad: Math.PI / 2 },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("recomputes the gutter's eave edge when the roof direction changes", () => {
+    const doc = withOutline();
+    const added = addRoofPlane(doc);
+    if (!added.ok) throw new Error("setup failed");
+    expect(added.document.site.gutters[0]!.edgeIndex).toBe(2);
+
+    const result = applyCommand(added.document, {
+      type: "update-roof-plane",
+      roofPlaneId: "roof-1",
+      patch: { directionRad: 0 },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // directionRad = +x now, so the x=4000 edge (vertices 1,2) is the eave.
+      expect(result.document.site.gutters[0]!.edgeIndex).toBe(1);
+    }
+  });
+});
+
+describe("applyCommand: update-gutter", () => {
+  function withRoofedOutline(): ProjectDocument {
+    const withOutlineResult = applyCommand(baseDoc(), {
+      type: "create-house-outline",
+      outlineId: "house-1",
+      points: rectanglePoints(),
+    });
+    if (!withOutlineResult.ok) throw new Error("setup failed");
+    const withRoof = applyCommand(withOutlineResult.document, {
+      type: "add-roof-plane",
+      roofPlaneId: "roof-1",
+      houseOutlineId: "house-1",
+      referenceElevationMm: 2690,
+      pitchRad: (10 * Math.PI) / 180,
+      directionRad: Math.PI / 2,
+      gutterId: "gutter-1",
+      gutterWidthMm: 100,
+      gutterDropMm: 50,
+    });
+    if (!withRoof.ok) throw new Error("setup failed");
+    return withRoof.document;
+  }
+
+  it("updates gutter width and drop", () => {
+    const doc = withRoofedOutline();
+    const result = applyCommand(doc, {
+      type: "update-gutter",
+      gutterId: "gutter-1",
+      patch: { widthMm: 150, dropMm: 75 },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const gutter = result.document.site.gutters[0]!;
+      expect(gutter.widthMm).toBe(150);
+      expect(gutter.dropMm).toBe(75);
+    }
+  });
+
+  it("rejects updating an unknown gutter", () => {
+    const doc = withRoofedOutline();
+    const result = applyCommand(doc, {
+      type: "update-gutter",
+      gutterId: "missing",
+      patch: { widthMm: 150 },
     });
     expect(result.ok).toBe(false);
   });

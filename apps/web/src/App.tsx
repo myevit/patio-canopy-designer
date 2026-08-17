@@ -1,14 +1,14 @@
-import { useEffect, useMemo, useReducer } from "react";
+import { useEffect, useMemo, useReducer, useRef } from "react";
 import { buildScene } from "@canopy/geometry";
 import {
   SAMPLE_PROJECT,
   createEmptyProjectDocument,
   exportProjectDocument,
   importProjectDocument,
-  type Gutter,
+  type DocumentCommand,
 } from "@canopy/shared";
 import { BottomDrawer } from "./components/BottomDrawer.js";
-import { Inspector, type RoofPlanePatch } from "./components/Inspector.js";
+import { Inspector, type CommandOutcome, type GutterPatch, type RoofPlanePatch } from "./components/Inspector.js";
 import { PlanView } from "./components/PlanView.js";
 import { ProjectMenu } from "./components/ProjectMenu.js";
 import { StatusBar } from "./components/StatusBar.js";
@@ -27,7 +27,15 @@ function nextId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
 }
 
-const DEFAULT_GUTTER: Gutter = { widthMm: 100, dropMm: 50 };
+const DEFAULT_PITCH_RAD = (5 * Math.PI) / 180;
+const DEFAULT_GUTTER_WIDTH_MM = 100;
+const DEFAULT_GUTTER_DROP_MM = 50;
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
+}
 
 export interface AppProps {
   persistenceAdapter?: PersistenceAdapter;
@@ -41,35 +49,76 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
 
   const [state, dispatch] = useReducer(studioReducer, initialStudioState);
   const documentController = useDocumentController(SAMPLE_PROJECT);
-  useProjectPersistence(documentController, persistenceAdapter);
+  const persistence = useProjectPersistence(documentController, persistenceAdapter);
 
   const scene = useMemo(() => buildScene(documentController.document), [documentController.document]);
 
+  function dispatchGatedCommand(command: DocumentCommand): { ok: true } | { ok: false; error: string } {
+    if (!persistence.loaded) {
+      return { ok: false, error: "The project is still loading. Try again in a moment." };
+    }
+    return documentController.dispatchCommand(command);
+  }
+
+  const drawingPoints = state.interaction.status === "drawing-house-outline" ? state.interaction.points : null;
+
+  function closeDrawing() {
+    if (state.interaction.status !== "drawing-house-outline") return;
+    const result = dispatchGatedCommand({
+      type: "create-house-outline",
+      outlineId: nextId("house-outline"),
+      points: state.interaction.points,
+    });
+    if (result.ok) {
+      dispatch({ type: "select-tool", tool: "select" });
+    } else {
+      dispatch({ type: "set-outline-error", error: result.error });
+    }
+  }
+
+  function handleDeleteVertex(vertex: SelectedVertex) {
+    const result = dispatchGatedCommand({
+      type: "delete-house-outline-vertex",
+      outlineId: vertex.outlineId,
+      vertexIndex: vertex.index,
+    });
+    if (result.ok) {
+      dispatch({ type: "select-vertex", vertex: null });
+    } else {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+  }
+
+  const latestRef = useRef({ state, dispatch, closeDrawing, handleDeleteVertex });
+  latestRef.current = { state, dispatch, closeDrawing, handleDeleteVertex };
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      if (isEditableTarget(event.target)) return;
+      const current = latestRef.current;
+
       if (event.key === "Escape") {
-        dispatch({ type: "escape" });
+        current.dispatch({ type: "escape" });
         return;
       }
-      if (state.interaction.status === "drawing-house-outline") {
-        if (event.key === "Enter" && state.interaction.points.length >= 3) {
+      if (current.state.interaction.status === "drawing-house-outline") {
+        if (event.key === "Enter" && current.state.interaction.points.length >= 3) {
           event.preventDefault();
-          closeDrawing();
+          current.closeDrawing();
         } else if (event.key === "Backspace") {
           event.preventDefault();
-          dispatch({ type: "remove-last-outline-point" });
+          current.dispatch({ type: "remove-last-outline-point" });
         }
         return;
       }
-      if (state.selectedVertex && (event.key === "Delete" || event.key === "Backspace")) {
+      if (current.state.selectedVertex && (event.key === "Delete" || event.key === "Backspace")) {
         event.preventDefault();
-        handleDeleteVertex(state.selectedVertex);
+        current.handleDeleteVertex(current.state.selectedVertex);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.interaction, state.selectedVertex]);
+  }, []);
 
   const selected = useMemo(
     () => findSceneObject(scene, state.selectedObjectId),
@@ -86,24 +135,13 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
     return scene.roofPlanes.find((roofPlane) => roofPlane.houseOutlineId === selected.id) ?? null;
   }, [scene, selected]);
 
-  const drawingPoints = state.interaction.status === "drawing-house-outline" ? state.interaction.points : null;
+  const gutterForSelectedRoofPlane = useMemo(() => {
+    if (!roofPlaneForSelected) return null;
+    return scene.gutters.find((gutter) => gutter.roofPlaneId === roofPlaneForSelected.id) ?? null;
+  }, [scene, roofPlaneForSelected]);
 
-  function closeDrawing() {
-    if (state.interaction.status !== "drawing-house-outline") return;
-    const result = documentController.dispatchCommand({
-      type: "create-house-outline",
-      outlineId: nextId("house-outline"),
-      points: state.interaction.points,
-    });
-    if (result.ok) {
-      dispatch({ type: "select-tool", tool: "select" });
-    } else {
-      dispatch({ type: "set-outline-error", error: result.error });
-    }
-  }
-
-  function handleMoveVertex(vertex: SelectedVertex, position: { x: number; y: number; z: number }) {
-    const result = documentController.dispatchCommand({
+  function handleMoveVertex(vertex: SelectedVertex, position: { x: number; y: number; z: number }): CommandOutcome {
+    const result = dispatchGatedCommand({
       type: "move-house-outline-vertex",
       outlineId: vertex.outlineId,
       vertexIndex: vertex.index,
@@ -112,10 +150,11 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
     if (!result.ok) {
       dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
     }
+    return result;
   }
 
   function handleInsertVertex(outlineId: string, afterIndex: number, position: { x: number; y: number; z: number }) {
-    const result = documentController.dispatchCommand({
+    const result = dispatchGatedCommand({
       type: "insert-house-outline-vertex",
       outlineId,
       afterIndex,
@@ -126,33 +165,37 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
     }
   }
 
-  function handleDeleteVertex(vertex: SelectedVertex) {
-    const result = documentController.dispatchCommand({
-      type: "delete-house-outline-vertex",
-      outlineId: vertex.outlineId,
-      vertexIndex: vertex.index,
-    });
-    if (result.ok) {
-      dispatch({ type: "select-vertex", vertex: null });
-    } else {
-      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
-    }
-  }
-
   function handleAddRoofPlane(houseOutlineId: string) {
-    documentController.dispatchCommand({
+    const result = dispatchGatedCommand({
       type: "add-roof-plane",
       roofPlaneId: nextId("roof-plane"),
       houseOutlineId,
       referenceElevationMm: 2400,
-      pitchDeg: 5,
+      pitchRad: DEFAULT_PITCH_RAD,
       directionRad: 0,
-      gutter: DEFAULT_GUTTER,
+      gutterId: nextId("gutter"),
+      gutterWidthMm: DEFAULT_GUTTER_WIDTH_MM,
+      gutterDropMm: DEFAULT_GUTTER_DROP_MM,
     });
+    if (!result.ok) {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
   }
 
-  function handleUpdateRoofPlane(roofPlaneId: string, patch: RoofPlanePatch) {
-    documentController.dispatchCommand({ type: "update-roof-plane", roofPlaneId, patch });
+  function handleUpdateRoofPlane(roofPlaneId: string, patch: RoofPlanePatch): CommandOutcome {
+    const result = dispatchGatedCommand({ type: "update-roof-plane", roofPlaneId, patch });
+    if (!result.ok) {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+    return result;
+  }
+
+  function handleUpdateGutter(gutterId: string, patch: GutterPatch): CommandOutcome {
+    const result = dispatchGatedCommand({ type: "update-gutter", gutterId, patch });
+    if (!result.ok) {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+    return result;
   }
 
   function handleNewProject() {
@@ -239,14 +282,20 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
           selectedVertex={state.selectedVertex}
           vertexOutline={vertexOutline}
           roofPlane={roofPlaneForSelected}
+          gutter={gutterForSelectedRoofPlane}
+          drawingPoints={drawingPoints}
           onMoveVertex={handleMoveVertex}
           onDeleteVertex={handleDeleteVertex}
           onAddRoofPlane={handleAddRoofPlane}
           onUpdateRoofPlane={handleUpdateRoofPlane}
+          onUpdateGutter={handleUpdateGutter}
+          onAddDrawingPoint={(point) => dispatch({ type: "add-outline-point", point })}
+          onRemoveLastDrawingPoint={() => dispatch({ type: "remove-last-outline-point" })}
+          onCloseDrawing={closeDrawing}
         />
       </div>
 
-      <StatusBar tool={state.tool} interaction={state.interaction} />
+      <StatusBar tool={state.tool} interaction={state.interaction} persistenceError={persistence.error} />
 
       <BottomDrawer
         open={state.drawerOpen}

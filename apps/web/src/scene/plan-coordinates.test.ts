@@ -28,3 +28,30 @@ describe("clientPointToWorld", () => {
     expect(result.y).toBeCloseTo(4800, 6);
   });
 });
+
+describe("clientPointToWorld with a non-matching aspect ratio (preserveAspectRatio='xMidYMid meet' letterboxing)", () => {
+  const viewBox = "-600 -400 8400 5200";
+
+  it("maps the rendered area's center to the viewBox center when the rect is taller than the viewBox aspect (letterboxed top/bottom)", () => {
+    const rect = { left: 0, top: 0, width: 1000, height: 1000 };
+    const result = clientPointToWorld(viewBox, rect, 500, 500);
+    expect(result.x).toBeCloseTo(3600, 3);
+    expect(result.y).toBeCloseTo(2200, 3);
+  });
+
+  it("maps the rendered area's center to the viewBox center when the rect is wider than the viewBox aspect (letterboxed left/right)", () => {
+    const rect = { left: 0, top: 0, width: 2000, height: 500 };
+    const result = clientPointToWorld(viewBox, rect, 1000, 250);
+    expect(result.x).toBeCloseTo(3600, 3);
+    expect(result.y).toBeCloseTo(2200, 3);
+  });
+
+  it("maps the rect origin outside the rendered area into world space past the viewBox edge instead of stretching into it", () => {
+    // With a square rect, the rendered viewBox is letterboxed top/bottom, so
+    // the rect's very top-left corner maps above the viewBox's actual top edge.
+    const rect = { left: 0, top: 0, width: 1000, height: 1000 };
+    const result = clientPointToWorld(viewBox, rect, 0, 0);
+    expect(result.x).toBeCloseTo(-600, 3);
+    expect(result.y).toBeLessThan(-400);
+  });
+});

@@ -1,5 +1,5 @@
 import Dexie, { type Table } from "dexie";
-import type { ProjectDocument } from "@canopy/shared";
+import { parseProjectDocument, type ProjectDocument } from "@canopy/shared";
 import type { PersistenceAdapter } from "./persistence-adapter.js";
 
 interface ProjectRecord {
@@ -27,7 +27,12 @@ export function createDexiePersistenceAdapter(): PersistenceAdapter {
     },
     async load() {
       const record = await db.projects.get(AUTOSAVE_KEY);
-      return record?.document;
+      if (!record) return undefined;
+      // A stored record may be corrupt, obsolete, or otherwise semantically
+      // invalid (e.g. from a schema change); recover to "no saved project"
+      // rather than handing invalid data to the rest of the app.
+      const result = parseProjectDocument(record.document);
+      return result.success ? result.data : undefined;
     },
     async clear() {
       await db.projects.delete(AUTOSAVE_KEY);
