@@ -80,8 +80,16 @@ function scene(): ScenePrimitives {
       },
     ],
     joints: [
-      { id: "joint-1", kind: "joint", position: { x: 500, y: 250, z: 2500 }, connectedMemberIds: ["member-1"] },
+      {
+        id: "joint-1",
+        kind: "joint",
+        position: { x: 500, y: 250, z: 2500 },
+        connectedMemberIds: ["member-1"],
+        crossingBehavior: "unresolved",
+        engineeringStatus: "engineer-review-required",
+      },
     ],
+    jointCandidates: [],
     houseAnchors: [
       { id: "anchor-house-1", kind: "house-anchor", position: { x: 3000, y: 0, z: 2700 } },
     ],
@@ -275,5 +283,66 @@ describe("ThreeView fan flow", () => {
     );
     await user.click(screen.getByRole("button", { name: "Select post-1 in 3D scene" }));
     expect(onChooseFanAnchor).toHaveBeenCalledWith("anchor-top");
+  });
+});
+
+function sceneWithCandidate(): ScenePrimitives {
+  const base = scene();
+  return {
+    ...base,
+    jointCandidates: [
+      {
+        id: "candidate::crossing::member-1::member-2",
+        kind: "joint-candidate",
+        candidateKind: "crossing",
+        memberIds: ["member-1", "member-2"],
+        position: { x: 500, y: 250, z: 2500 },
+      },
+    ],
+  };
+}
+
+describe("ThreeView joint candidates", () => {
+  it("renders a mesh for a detected candidate while the Joint tool is active", () => {
+    render(<ThreeView scene={sceneWithCandidate()} selectedObjectId={null} onSelect={() => {}} tool="joint" />);
+    expect(screen.getByTestId("scene-object-candidate::crossing::member-1::member-2")).toBeInTheDocument();
+  });
+
+  it("does not render candidate meshes outside the Joint tool", () => {
+    render(<ThreeView scene={sceneWithCandidate()} selectedObjectId={null} onSelect={() => {}} tool="select" />);
+    expect(screen.queryByTestId("scene-object-candidate::crossing::member-1::member-2")).not.toBeInTheDocument();
+  });
+
+  it("calls onSelectCandidate when a candidate mesh is clicked", async () => {
+    const user = userEvent.setup();
+    const onSelectCandidate = vi.fn();
+    render(
+      <ThreeView
+        scene={sceneWithCandidate()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="joint"
+        onSelectCandidate={onSelectCandidate}
+      />,
+    );
+    await user.click(screen.getByTestId("scene-object-candidate::crossing::member-1::member-2"));
+    expect(onSelectCandidate).toHaveBeenCalledWith("candidate::crossing::member-1::member-2");
+  });
+});
+
+describe("ThreeView focused joint inspection", () => {
+  it("shows only the focused joint and its connected members, hiding unrelated scene objects", () => {
+    render(<ThreeView scene={scene()} selectedObjectId={null} onSelect={() => {}} focusedJointId="joint-1" />);
+    expect(screen.getByTestId("scene-object-joint-1")).toBeInTheDocument();
+    expect(screen.getByTestId("scene-object-member-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("scene-object-post-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("scene-wall-house-1-wall-0")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("scene-roof-plane-roof-1")).not.toBeInTheDocument();
+  });
+
+  it("shows the full scene when no joint is focused", () => {
+    render(<ThreeView scene={scene()} selectedObjectId={null} onSelect={() => {}} focusedJointId={null} />);
+    expect(screen.getByTestId("scene-object-post-1")).toBeInTheDocument();
+    expect(screen.getByTestId("scene-wall-house-1-wall-0")).toBeInTheDocument();
   });
 });

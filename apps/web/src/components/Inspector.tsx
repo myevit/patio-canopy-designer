@@ -1,9 +1,47 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { SceneGutter, SceneObject, SceneRoofPlane } from "@canopy/geometry";
-import type { FanDistribution, FanElevationRule, FanField, Section, Vector3Mm } from "@canopy/shared";
+import type { SceneGutter, SceneJointCandidate, SceneObject, SceneRoofPlane } from "@canopy/geometry";
+import type {
+  CrossingBehavior,
+  EngineeringStatus,
+  FanDistribution,
+  FanElevationRule,
+  FanField,
+  Section,
+  Vector3Mm,
+} from "@canopy/shared";
 import type { FanDraft } from "../state/fan-draft.js";
 import type { SelectedVertex } from "../state/selected-vertex.js";
 import type { ToolId } from "../state/tool.js";
+
+const CROSSING_BEHAVIOR_LABELS: Record<CrossingBehavior, string> = {
+  "a-over-b": "First member over second",
+  "b-over-a": "Second member over first",
+  "structural-joint": "Structural joint",
+  "half-lap": "Half-lap",
+  "no-contact": "No contact (suppressed)",
+  unresolved: "Unresolved",
+};
+
+const CROSSING_BEHAVIOR_IDS: CrossingBehavior[] = [
+  "a-over-b",
+  "b-over-a",
+  "structural-joint",
+  "half-lap",
+  "no-contact",
+  "unresolved",
+];
+
+const ENGINEERING_STATUS_LABELS: Record<EngineeringStatus, string> = {
+  "engineer-review-required": "Engineer review required",
+  "input-requires-verification": "Input requires verification",
+  "check-not-implemented": "Check not implemented",
+};
+
+const ENGINEERING_STATUS_IDS: EngineeringStatus[] = [
+  "engineer-review-required",
+  "input-requires-verification",
+  "check-not-implemented",
+];
 
 const MEMBER_ROLE_LABELS: Record<string, string> = {
   ledger: "Ledger",
@@ -415,6 +453,137 @@ function FanFieldEditPanel({ fanField, sections, onUpdate, onDelete }: FanFieldE
   );
 }
 
+interface JointBehaviorFieldsProps {
+  crossingBehavior: CrossingBehavior;
+  engineeringStatus: EngineeringStatus;
+  onChangeCrossingBehavior: (value: CrossingBehavior) => void;
+  onChangeEngineeringStatus: (value: EngineeringStatus) => void;
+}
+
+function JointBehaviorFields({
+  crossingBehavior,
+  engineeringStatus,
+  onChangeCrossingBehavior,
+  onChangeEngineeringStatus,
+}: JointBehaviorFieldsProps) {
+  const behaviorId = useId();
+  const statusId = useId();
+  return (
+    <>
+      <p className="inspector__field">
+        <label htmlFor={behaviorId}>Crossing behavior</label>
+        <select
+          id={behaviorId}
+          value={crossingBehavior}
+          onChange={(event) => onChangeCrossingBehavior(event.target.value as CrossingBehavior)}
+        >
+          {CROSSING_BEHAVIOR_IDS.map((id) => (
+            <option key={id} value={id}>
+              {CROSSING_BEHAVIOR_LABELS[id]}
+            </option>
+          ))}
+        </select>
+      </p>
+      <p className="inspector__field">
+        <label htmlFor={statusId}>Engineering status</label>
+        <select
+          id={statusId}
+          value={engineeringStatus}
+          onChange={(event) => onChangeEngineeringStatus(event.target.value as EngineeringStatus)}
+        >
+          {ENGINEERING_STATUS_IDS.map((id) => (
+            <option key={id} value={id}>
+              {ENGINEERING_STATUS_LABELS[id]}
+            </option>
+          ))}
+        </select>
+      </p>
+    </>
+  );
+}
+
+export interface JointPatch {
+  positionMm?: Vector3Mm;
+  crossingBehavior?: CrossingBehavior;
+  engineeringStatus?: EngineeringStatus;
+}
+
+function candidateSummary(candidate: SceneJointCandidate): string {
+  const kindLabel = candidate.candidateKind === "shared-endpoint" ? "Shared endpoint" : "Crossing";
+  return `${kindLabel}: ${candidate.memberIds.join(", ")}`;
+}
+
+interface CandidateListPanelProps {
+  candidates: SceneJointCandidate[];
+  onSelectCandidate: (candidateId: string) => void;
+}
+
+function CandidateListPanel({ candidates, onSelectCandidate }: CandidateListPanelProps) {
+  return (
+    <div className="inspector__drawing-panel">
+      <h3>Detected connections</h3>
+      {candidates.length === 0 ? (
+        <p>No unresolved connections. Every place members meet has a confirmed joint.</p>
+      ) : (
+        <ul>
+          {candidates.map((candidate) => (
+            <li key={candidate.id}>
+              {candidateSummary(candidate)}{" "}
+              <button type="button" onClick={() => onSelectCandidate(candidate.id)}>
+                Review
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+interface CandidateConfirmPanelProps {
+  candidate: SceneJointCandidate;
+  onConfirm: (candidate: SceneJointCandidate, crossingBehavior: CrossingBehavior, engineeringStatus: EngineeringStatus) => CommandOutcome;
+  onCancel: () => void;
+}
+
+function CandidateConfirmPanel({ candidate, onConfirm, onCancel }: CandidateConfirmPanelProps) {
+  const [crossingBehavior, setCrossingBehavior] = useState<CrossingBehavior>("structural-joint");
+  const [engineeringStatus, setEngineeringStatus] = useState<EngineeringStatus>("engineer-review-required");
+  const [error, setError] = useState<string | null>(null);
+
+  function handleConfirm() {
+    const outcome = onConfirm(candidate, crossingBehavior, engineeringStatus);
+    if (outcome && !outcome.ok) {
+      setError(outcome.error ?? "That joint was rejected.");
+    }
+  }
+
+  return (
+    <div className="inspector__drawing-panel">
+      <h3>Confirm connection</h3>
+      <dl>
+        <dt>Connected members</dt>
+        <dd>{candidate.memberIds.join(", ")}</dd>
+        <dt>Position</dt>
+        <dd>{formatPoint(candidate.position)}</dd>
+      </dl>
+      <JointBehaviorFields
+        crossingBehavior={crossingBehavior}
+        engineeringStatus={engineeringStatus}
+        onChangeCrossingBehavior={setCrossingBehavior}
+        onChangeEngineeringStatus={setEngineeringStatus}
+      />
+      <button type="button" onClick={handleConfirm}>
+        Create joint
+      </button>
+      <button type="button" onClick={onCancel}>
+        Cancel
+      </button>
+      {error && <span role="alert">{error}</span>}
+    </div>
+  );
+}
+
 function formatDegrees(radians: number): number {
   return Number(((radians * 180) / Math.PI).toFixed(4));
 }
@@ -461,6 +630,17 @@ export interface InspectorProps {
   onUpdateFanField?: (fanFieldId: string, patch: FanFieldPatch) => CommandOutcome;
   onDeleteFanField?: (fanFieldId: string) => void;
   onDeleteJoint?: (jointId: string) => void;
+  unresolvedCandidates?: SceneJointCandidate[];
+  selectedCandidate?: SceneJointCandidate | null;
+  onSelectCandidate?: (candidateId: string) => void;
+  onCancelCandidateSelection?: () => void;
+  onConfirmCandidate?: (
+    candidate: SceneJointCandidate,
+    crossingBehavior: CrossingBehavior,
+    engineeringStatus: EngineeringStatus,
+  ) => CommandOutcome;
+  onUpdateJoint?: (jointId: string, patch: JointPatch) => CommandOutcome;
+  onFocusJoint?: (jointId: string) => void;
 }
 
 export function Inspector({
@@ -495,6 +675,13 @@ export function Inspector({
   onUpdateFanField = () => ({ ok: true }),
   onDeleteFanField = () => {},
   onDeleteJoint = () => {},
+  unresolvedCandidates,
+  selectedCandidate = null,
+  onSelectCandidate = () => {},
+  onCancelCandidateSelection = () => {},
+  onConfirmCandidate = () => ({ ok: true }),
+  onUpdateJoint = () => ({ ok: true }),
+  onFocusJoint = () => {},
 }: InspectorProps) {
   if (selectedVertex && vertexOutline) {
     const point = vertexOutline.points[selectedVertex.index];
@@ -544,6 +731,14 @@ export function Inspector({
         />
       ) : tool === "post" ? (
         <PostPlacementPanel onPlacePost={onPlacePost} />
+      ) : tool === "joint" && selectedCandidate ? (
+        <CandidateConfirmPanel
+          candidate={selectedCandidate}
+          onConfirm={onConfirmCandidate}
+          onCancel={onCancelCandidateSelection}
+        />
+      ) : tool === "joint" && unresolvedCandidates ? (
+        <CandidateListPanel candidates={unresolvedCandidates} onSelectCandidate={onSelectCandidate} />
       ) : (
         !selected && <p>No selection. Choose a post, member, or joint to inspect it.</p>
       )}
@@ -699,6 +894,30 @@ export function Inspector({
             <dt>Connected members</dt>
             <dd>{selected.connectedMemberIds.join(", ")}</dd>
           </dl>
+          <NumberField
+            label="Position X (mm)"
+            value={selected.position.x}
+            onCommit={(x) => onUpdateJoint(selected.id, { positionMm: { ...selected.position, x } })}
+          />
+          <NumberField
+            label="Position Y (mm)"
+            value={selected.position.y}
+            onCommit={(y) => onUpdateJoint(selected.id, { positionMm: { ...selected.position, y } })}
+          />
+          <NumberField
+            label="Position Z (mm)"
+            value={selected.position.z}
+            onCommit={(z) => onUpdateJoint(selected.id, { positionMm: { ...selected.position, z } })}
+          />
+          <JointBehaviorFields
+            crossingBehavior={selected.crossingBehavior}
+            engineeringStatus={selected.engineeringStatus}
+            onChangeCrossingBehavior={(crossingBehavior) => onUpdateJoint(selected.id, { crossingBehavior })}
+            onChangeEngineeringStatus={(engineeringStatus) => onUpdateJoint(selected.id, { engineeringStatus })}
+          />
+          <button type="button" onClick={() => onFocusJoint(selected.id)}>
+            Inspect in 3D
+          </button>
           <button type="button" onClick={() => onDeleteJoint(selected.id)}>
             Delete joint
           </button>

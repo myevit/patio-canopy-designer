@@ -127,7 +127,7 @@ describe("buildScene", () => {
     });
   });
 
-  it("passes a joint's position and connected member ids through unchanged", () => {
+  it("passes a joint's position, connected member ids, crossing behavior, and engineering status through unchanged", () => {
     const scene = buildScene(fixtureDocument());
     expect(scene.joints).toEqual([
       {
@@ -135,8 +135,52 @@ describe("buildScene", () => {
         kind: "joint",
         position: { x: 5, y: 10, z: 2500 },
         connectedMemberIds: ["member-1"],
+        crossingBehavior: "unresolved",
+        engineeringStatus: "engineer-review-required",
       },
     ]);
+  });
+
+  it("derives an unresolved joint candidate where two members meet without a confirmed joint", () => {
+    const doc = fixtureDocument();
+    doc.joints = [];
+    doc.anchors.push({ id: "a-other", kind: "free", positionMm: { x: 10, y: 20, z: 2400 } });
+    doc.members.push({
+      id: "member-2",
+      role: "perimeter-beam",
+      startAnchorId: "a-top",
+      endAnchorId: "a-other",
+      sectionId: "sec-beam",
+      rollRad: 0,
+    });
+    const scene = buildScene(doc);
+    expect(scene.jointCandidates).toHaveLength(1);
+    expect(scene.jointCandidates[0]).toMatchObject({
+      kind: "joint-candidate",
+      memberIds: ["member-1", "member-2"],
+    });
+  });
+
+  it("excludes a candidate that already has a confirmed joint", () => {
+    const doc = fixtureDocument();
+    doc.anchors.push({ id: "a-other", kind: "free", positionMm: { x: 10, y: 20, z: 2400 } });
+    doc.members.push({
+      id: "member-2",
+      role: "perimeter-beam",
+      startAnchorId: "a-top",
+      endAnchorId: "a-other",
+      sectionId: "sec-beam",
+      rollRad: 0,
+    });
+    doc.joints.push({
+      id: "joint-2",
+      connectedMemberIds: ["member-1", "member-2"],
+      positionMm: { x: 10, y: 20, z: 2400 },
+      crossingBehavior: "structural-joint",
+      engineeringStatus: "engineer-review-required",
+    });
+    const scene = buildScene(doc);
+    expect(scene.jointCandidates).toHaveLength(0);
   });
 
   it("passes through house outline and patio outline points", () => {

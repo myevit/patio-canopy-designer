@@ -1,4 +1,4 @@
-import type { MemberRole, Vector3Mm } from "@canopy/shared";
+import type { CrossingBehavior, EngineeringStatus, JointCandidateKind, MemberRole, Vector3Mm } from "@canopy/shared";
 
 export interface SceneHouseOutline {
   id: string;
@@ -75,6 +75,16 @@ export interface SceneJoint {
   kind: "joint";
   position: Vector3Mm;
   connectedMemberIds: string[];
+  crossingBehavior: CrossingBehavior;
+  engineeringStatus: EngineeringStatus;
+}
+
+export interface SceneJointCandidate {
+  id: string;
+  kind: "joint-candidate";
+  candidateKind: JointCandidateKind;
+  memberIds: string[];
+  position: Vector3Mm;
 }
 
 export interface ScenePrimitives {
@@ -86,6 +96,7 @@ export interface ScenePrimitives {
   posts: ScenePost[];
   members: SceneMember[];
   joints: SceneJoint[];
+  jointCandidates: SceneJointCandidate[];
   houseAnchors: SceneHouseAnchor[];
 }
 

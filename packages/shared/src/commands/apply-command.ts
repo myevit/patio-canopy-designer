@@ -5,9 +5,29 @@ import {
   deriveFanFieldMemberId,
   deriveFanFieldTargetAnchorId,
 } from "../fan-field-geometry.js";
+import { regenerateJointPosition } from "../joint-candidates.js";
 import { validateOutline } from "../outline-validation.js";
 import { formatZodError } from "../zod-error.js";
 import type { CommandResult, DocumentCommand } from "./types.js";
+
+/**
+ * Called after any command that can move a member's endpoint (post move/
+ * resize, fan-field regeneration) so joints never silently go stale: each
+ * joint's position is recomputed from its connected members' current
+ * geometry, or the joint is flagged as needing resolution if they no longer
+ * meet within tolerance.
+ */
+function regenerateOrFlagJoints(draft: ProjectDocument): void {
+  draft.joints.forEach((joint) => {
+    const regenerated = regenerateJointPosition(draft, joint);
+    if (regenerated) {
+      joint.positionMm = regenerated;
+    } else {
+      joint.crossingBehavior = "unresolved";
+      joint.engineeringStatus = "input-requires-verification";
+    }
+  });
+}
 
 function cloneDocument(document: ProjectDocument): ProjectDocument {
   return JSON.parse(JSON.stringify(document)) as ProjectDocument;
@@ -187,6 +207,7 @@ export function applyCommand(document: ProjectDocument, command: DocumentCommand
       }
       base.positionMm = command.position;
       top.positionMm = { ...command.position, z: command.position.z + post.heightMm };
+      regenerateOrFlagJoints(draft);
       return finalize(draft);
     }
 
@@ -203,6 +224,7 @@ export function applyCommand(document: ProjectDocument, command: DocumentCommand
           top.positionMm = { ...base.positionMm, z: base.positionMm.z + post.heightMm };
         }
       }
+      regenerateOrFlagJoints(draft);
       return finalize(draft);
     }
 
@@ -389,6 +411,7 @@ export function applyCommand(document: ProjectDocument, command: DocumentCommand
       fanField.elevationRule = elevationRule;
       fanField.memberTemplate = memberTemplate;
       fanField.memberIds = memberIds;
+      regenerateOrFlagJoints(draft);
       return finalize(draft);
     }
 
@@ -412,6 +435,35 @@ export function applyCommand(document: ProjectDocument, command: DocumentCommand
       draft.anchors = draft.anchors.filter(
         (a) => !(a.kind === "fan-target" && a.sourceRef === command.fanFieldId),
       );
+      return finalize(draft);
+    }
+
+    case "confirm-joint": {
+      if (command.connectedMemberIds.length < 1) {
+        return { ok: false, error: "A joint needs at least one connected member." };
+      }
+      const unknownMemberId = command.connectedMemberIds.find(
+        (id) => !draft.members.some((m) => m.id === id),
+      );
+      if (unknownMemberId) {
+        return { ok: false, error: `Unknown member id: ${unknownMemberId}` };
+      }
+      draft.joints.push({
+        id: command.jointId,
+        connectedMemberIds: command.connectedMemberIds,
+        positionMm: command.positionMm,
+        crossingBehavior: command.crossingBehavior,
+        engineeringStatus: command.engineeringStatus,
+      });
+      return finalize(draft);
+    }
+
+    case "update-joint": {
+      const joint = draft.joints.find((j) => j.id === command.jointId);
+      if (!joint) {
+        return { ok: false, error: `Unknown joint id: ${command.jointId}` };
+      }
+      Object.assign(joint, command.patch);
       return finalize(draft);
     }
 

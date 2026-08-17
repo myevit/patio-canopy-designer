@@ -431,6 +431,110 @@ describe("App: posts and beams", () => {
   });
 });
 
+describe("App: intersections and joints", () => {
+  function mockRect() {
+    const rect = { left: 0, top: 0, width: 8400, height: 5200 };
+    vi.spyOn(SVGElement.prototype, "getBoundingClientRect").mockReturnValue({
+      ...rect,
+      right: rect.width,
+      bottom: rect.height,
+      x: 0,
+      y: 0,
+      toJSON: () => rect,
+    } as DOMRect);
+  }
+
+  async function drawCrossingFrame(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "Post" }));
+    const svg = screen.getByTestId("plan-view-svg");
+    // Horizontal beam's posts: world (2000, 2000) and (5000, 2000).
+    fireEvent.click(svg, { clientX: 2600, clientY: 2400 });
+    fireEvent.click(svg, { clientX: 5600, clientY: 2400 });
+    // Vertical beam's posts: world (3500, 500) and (3500, 3500).
+    fireEvent.click(svg, { clientX: 4100, clientY: 900 });
+    fireEvent.click(svg, { clientX: 4100, clientY: 3900 });
+    const posts = screen.getAllByTestId(/^scene-object-post-/);
+    const [postA, postB, postC, postD] = posts.slice(-4);
+
+    await user.click(screen.getByRole("button", { name: "Beam" }));
+    fireEvent.click(postA!);
+    fireEvent.click(postB!);
+    fireEvent.click(postC!);
+    fireEvent.click(postD!);
+
+    await user.click(screen.getByRole("button", { name: "Select" }));
+    return { postA: postA!, postB: postB!, postC: postC! };
+  }
+
+  it("detects a crossing between two beams, confirms it as a structural joint, and inspects it in 3D focus mode", async () => {
+    mockRect();
+    const user = userEvent.setup();
+    renderApp();
+    await drawCrossingFrame(user);
+
+    await user.click(screen.getByRole("button", { name: "Joint" }));
+    expect(screen.getByText(/detected connections/i)).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /review/i }).at(-1)!);
+
+    expect(screen.getByText(/confirm connection/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /create joint/i }));
+
+    const inspector = screen.getByRole("complementary", { name: "Inspector" });
+    expect(within(inspector).getByText(/^joint$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/crossing behavior/i)).toHaveValue("structural-joint");
+
+    await user.click(screen.getByRole("button", { name: /inspect in 3d/i }));
+    expect(screen.getByRole("button", { name: "3D" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("regenerates a confirmed joint's position when a connected post moves, within tolerance", async () => {
+    mockRect();
+    const user = userEvent.setup();
+    renderApp();
+    const { postC } = await drawCrossingFrame(user);
+
+    await user.click(screen.getByRole("button", { name: "Joint" }));
+    await user.click(screen.getAllByRole("button", { name: /review/i }).at(-1)!);
+    await user.click(screen.getByRole("button", { name: /create joint/i }));
+    const positionBefore = screen.getByLabelText(/position x/i).getAttribute("value");
+
+    // postC anchors the vertical beam at x=3500; nudging it to x=3600 shifts
+    // where it crosses the horizontal beam without breaking the crossing.
+    await user.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(postC);
+    const xField = screen.getByLabelText(/base x/i);
+    fireEvent.change(xField, { target: { value: "3600" } });
+    fireEvent.blur(xField);
+
+    const joint = screen.getAllByTestId(/^scene-object-joint-/).at(-1)!;
+    fireEvent.click(joint);
+    expect(screen.getByLabelText(/position x/i).getAttribute("value")).not.toBe(positionBefore);
+    expect(screen.getByLabelText(/crossing behavior/i)).toHaveValue("structural-joint");
+  });
+
+  it("flags a confirmed joint as unresolved once a move breaks the crossing entirely", async () => {
+    mockRect();
+    const user = userEvent.setup();
+    renderApp();
+    const { postC } = await drawCrossingFrame(user);
+
+    await user.click(screen.getByRole("button", { name: "Joint" }));
+    await user.click(screen.getAllByRole("button", { name: /review/i }).at(-1)!);
+    await user.click(screen.getByRole("button", { name: /create joint/i }));
+
+    // Moving postC's beam far outside the horizontal beam's x-range removes the crossing entirely.
+    await user.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(postC);
+    const xField = screen.getByLabelText(/base x/i);
+    fireEvent.change(xField, { target: { value: "9000" } });
+    fireEvent.blur(xField);
+
+    const joint = screen.getAllByTestId(/^scene-object-joint-/).at(-1)!;
+    fireEvent.click(joint);
+    expect(screen.getByLabelText(/crossing behavior/i)).toHaveValue("unresolved");
+  });
+});
+
 describe("App: fan fields", () => {
   it("Fan tool: choosing a source anchor then a target member previews and commits a fan field", async () => {
     const user = userEvent.setup();

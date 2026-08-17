@@ -8,6 +8,8 @@ describe("initialStudioState", () => {
     expect(initialStudioState.interaction).toEqual({ status: "idle" });
     expect(initialStudioState.viewMode).toBe("plan");
     expect(initialStudioState.selectedObjectId).toBeNull();
+    expect(initialStudioState.selectedCandidateId).toBeNull();
+    expect(initialStudioState.focusedJointId).toBeNull();
     expect(initialStudioState.drawerOpen).toBe(false);
   });
 });
@@ -227,6 +229,52 @@ describe("studioReducer: fan drawing", () => {
     const next = studioReducer(state, { type: "escape" });
     expect(next.tool).toBe("select");
     expect(next.interaction).toEqual({ status: "idle" });
+  });
+});
+
+describe("studioReducer: joint candidate selection and focus", () => {
+  it("selects a candidate and clears any object/vertex selection", () => {
+    const withObject = studioReducer(initialStudioState, { type: "select-object", objectId: "post-1" });
+    const next = studioReducer(withObject, { type: "select-candidate", candidateId: "candidate-1" });
+    expect(next.selectedCandidateId).toBe("candidate-1");
+    expect(next.selectedObjectId).toBeNull();
+  });
+
+  it("selecting an object clears any candidate selection", () => {
+    const withCandidate = studioReducer(initialStudioState, {
+      type: "select-candidate",
+      candidateId: "candidate-1",
+    });
+    const next = studioReducer(withCandidate, { type: "select-object", objectId: "joint-1" });
+    expect(next.selectedCandidateId).toBeNull();
+    expect(next.selectedObjectId).toBe("joint-1");
+  });
+
+  it("focuses a joint for local 3D inspection", () => {
+    const next = studioReducer(initialStudioState, { type: "focus-joint", jointId: "joint-1" });
+    expect(next.focusedJointId).toBe("joint-1");
+  });
+
+  it("clears joint focus", () => {
+    const focused = studioReducer(initialStudioState, { type: "focus-joint", jointId: "joint-1" });
+    const next = studioReducer(focused, { type: "clear-joint-focus" });
+    expect(next.focusedJointId).toBeNull();
+  });
+
+  it("escape clears both candidate selection and joint focus", () => {
+    let state = studioReducer(initialStudioState, { type: "select-candidate", candidateId: "candidate-1" });
+    state = studioReducer(state, { type: "focus-joint", jointId: "joint-1" });
+    const next = studioReducer(state, { type: "escape" });
+    expect(next.selectedCandidateId).toBeNull();
+    expect(next.focusedJointId).toBeNull();
+  });
+
+  it("switching tools clears candidate selection and joint focus", () => {
+    let state = studioReducer(initialStudioState, { type: "select-candidate", candidateId: "candidate-1" });
+    state = studioReducer(state, { type: "focus-joint", jointId: "joint-1" });
+    const next = studioReducer(state, { type: "select-tool", tool: "select" });
+    expect(next.selectedCandidateId).toBeNull();
+    expect(next.focusedJointId).toBeNull();
   });
 });
 

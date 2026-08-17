@@ -58,8 +58,16 @@ function scene(): ScenePrimitives {
       },
     ],
     joints: [
-      { id: "joint-1", kind: "joint", position: { x: 25, y: 200, z: 2500 }, connectedMemberIds: ["member-1"] },
+      {
+        id: "joint-1",
+        kind: "joint",
+        position: { x: 25, y: 200, z: 2500 },
+        connectedMemberIds: ["member-1"],
+        crossingBehavior: "unresolved",
+        engineeringStatus: "engineer-review-required",
+      },
     ],
+    jointCandidates: [],
     houseAnchors: [
       { id: "anchor-house-1", kind: "house-anchor", position: { x: 3000, y: -300, z: 2700 } },
     ],
@@ -722,5 +730,49 @@ describe("PlanView roof and gutter rendering", () => {
   it("is not part of the tab order outside the Beam tool", () => {
     render(<PlanView scene={sceneWithRoofOverHouse()} selectedObjectId={null} onSelect={() => {}} tool="select" />);
     expect(screen.getByTestId("gutter-gutter-1")).not.toHaveAttribute("tabIndex");
+  });
+});
+
+function sceneWithCandidate(): ScenePrimitives {
+  const base = scene();
+  return {
+    ...base,
+    jointCandidates: [
+      {
+        id: "candidate::crossing::member-1::member-2",
+        kind: "joint-candidate",
+        candidateKind: "crossing",
+        memberIds: ["member-1", "member-2"],
+        position: { x: 60, y: 300, z: 2500 },
+      },
+    ],
+  };
+}
+
+describe("PlanView joint candidates", () => {
+  it("renders a detected candidate marker while the Joint tool is active", () => {
+    render(<PlanView scene={sceneWithCandidate()} selectedObjectId={null} onSelect={() => {}} tool="joint" />);
+    expect(screen.getByTestId("scene-object-candidate::crossing::member-1::member-2")).toBeInTheDocument();
+  });
+
+  it("does not render candidate markers outside the Joint tool", () => {
+    render(<PlanView scene={sceneWithCandidate()} selectedObjectId={null} onSelect={() => {}} tool="select" />);
+    expect(screen.queryByTestId("scene-object-candidate::crossing::member-1::member-2")).not.toBeInTheDocument();
+  });
+
+  it("calls onSelectCandidate when a candidate marker is clicked", async () => {
+    const user = userEvent.setup();
+    const onSelectCandidate = vi.fn();
+    render(
+      <PlanView
+        scene={sceneWithCandidate()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="joint"
+        onSelectCandidate={onSelectCandidate}
+      />,
+    );
+    await user.click(screen.getByTestId("scene-object-candidate::crossing::member-1::member-2"));
+    expect(onSelectCandidate).toHaveBeenCalledWith("candidate::crossing::member-1::member-2");
   });
 });

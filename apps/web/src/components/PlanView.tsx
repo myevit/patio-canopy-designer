@@ -51,6 +51,7 @@ export interface PlanViewProps {
   onChooseFanAnchor?: (anchorId: string) => void;
   onChooseFanTargetMember?: (memberId: string) => void;
   fanPreview?: { source: Vector3Mm; points: Vector3Mm[] } | null;
+  onSelectCandidate?: (candidateId: string) => void;
 }
 
 export function PlanView({
@@ -73,6 +74,7 @@ export function PlanView({
   onChooseFanAnchor = () => {},
   onChooseFanTargetMember = () => {},
   fanPreview = null,
+  onSelectCandidate = () => {},
 }: PlanViewProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [dragPreview, setDragPreview] = useState<{ vertex: SelectedVertex; position: Vector3Mm } | null>(null);
@@ -488,6 +490,27 @@ export function PlanView({
           onKeyDown={(event) => handleSelectionKey(event, joint.id, onSelect)}
         />
       ))}
+      {tool === "joint" &&
+        scene.jointCandidates.map((candidate) => (
+          <rect
+            key={candidate.id}
+            data-testid={`scene-object-${candidate.id}`}
+            className="plan-view__joint-candidate"
+            x={candidate.position.x - 30}
+            y={candidate.position.y - 30}
+            width={60}
+            height={60}
+            transform={`rotate(45 ${candidate.position.x} ${candidate.position.y})`}
+            tabIndex={0}
+            role="button"
+            aria-label={`Detected connection ${candidate.memberIds.join(", ")}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelectCandidate(candidate.id);
+            }}
+            onKeyDown={(event) => handleSelectionKey(event, candidate.id, onSelectCandidate)}
+          />
+        ))}
       {beamPreview && (
         <line
           data-testid="beam-preview"

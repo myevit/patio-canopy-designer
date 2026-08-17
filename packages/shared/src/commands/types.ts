@@ -1,4 +1,11 @@
-import type { FanDistribution, FanElevationRule, FanTarget, ProjectDocument } from "../design-schema.js";
+import type {
+  CrossingBehavior,
+  EngineeringStatus,
+  FanDistribution,
+  FanElevationRule,
+  FanTarget,
+  ProjectDocument,
+} from "../design-schema.js";
 import type { Vector3Mm } from "../units.js";
 
 export interface FanMemberTemplatePatch {
@@ -95,6 +102,23 @@ export type DocumentCommand =
       }>;
     }
   | { type: "delete-fan-field"; fanFieldId: string }
+  | {
+      type: "confirm-joint";
+      jointId: string;
+      connectedMemberIds: string[];
+      positionMm: Vector3Mm;
+      crossingBehavior: CrossingBehavior;
+      engineeringStatus: EngineeringStatus;
+    }
+  | {
+      type: "update-joint";
+      jointId: string;
+      patch: Partial<{
+        positionMm: Vector3Mm;
+        crossingBehavior: CrossingBehavior;
+        engineeringStatus: EngineeringStatus;
+      }>;
+    }
   | { type: "delete-joint"; jointId: string };
 
 export type CommandResult =

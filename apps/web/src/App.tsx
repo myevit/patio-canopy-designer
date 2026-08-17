@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useReducer, useRef } from "react";
-import { buildScene } from "@canopy/geometry";
+import { buildScene, type SceneJointCandidate } from "@canopy/geometry";
 import {
   DEFAULT_BEAM_SECTION_ID,
   DEFAULT_POST_SECTION_ID,
@@ -8,7 +8,9 @@ import {
   deriveFanFieldGeometry,
   exportProjectDocument,
   importProjectDocument,
+  type CrossingBehavior,
   type DocumentCommand,
+  type EngineeringStatus,
   type FanTarget,
   type Section,
   type Vector3Mm,
@@ -20,6 +22,7 @@ import {
   type CommandOutcome,
   type FanFieldPatch,
   type GutterPatch,
+  type JointPatch,
   type PostPatch,
   type RoofPlanePatch,
 } from "./components/Inspector.js";
@@ -173,6 +176,11 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
       documentController.document.fanFields.find((f) => f.memberIds.includes(state.selectedObjectId!)) ?? null
     );
   }, [documentController.document, state.selectedObjectId]);
+
+  const selectedCandidate = useMemo(() => {
+    if (!state.selectedCandidateId) return null;
+    return scene.jointCandidates.find((c) => c.id === state.selectedCandidateId) ?? null;
+  }, [scene, state.selectedCandidateId]);
 
   const fanDraft = state.interaction.status === "previewing-fan" ? state.interaction.draft : null;
 
@@ -471,6 +479,50 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
     }
   }
 
+  function handleSelectCandidate(candidateId: string) {
+    dispatch({ type: "select-candidate", candidateId });
+  }
+
+  function handleCancelCandidateSelection() {
+    dispatch({ type: "select-candidate", candidateId: null });
+  }
+
+  function handleConfirmCandidate(
+    candidate: SceneJointCandidate,
+    crossingBehavior: CrossingBehavior,
+    engineeringStatus: EngineeringStatus,
+  ): CommandOutcome {
+    const jointId = nextId("joint");
+    const result = dispatchGatedCommand({
+      type: "confirm-joint",
+      jointId,
+      connectedMemberIds: candidate.memberIds,
+      positionMm: candidate.position,
+      crossingBehavior,
+      engineeringStatus,
+    });
+    if (result.ok) {
+      dispatch({ type: "select-tool", tool: "select" });
+      dispatch({ type: "select-object", objectId: jointId });
+    } else {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+    return result;
+  }
+
+  function handleUpdateJoint(jointId: string, patch: JointPatch): CommandOutcome {
+    const result = dispatchGatedCommand({ type: "update-joint", jointId, patch });
+    if (!result.ok) {
+      dispatch({ type: "set-interaction", interaction: { status: "invalid", reason: result.error } });
+    }
+    return result;
+  }
+
+  function handleFocusJoint(jointId: string) {
+    dispatch({ type: "focus-joint", jointId });
+    dispatch({ type: "set-view-mode", viewMode: "3d" });
+  }
+
   function handleDeleteSelectedObject(objectId: string) {
     const object = findSceneObject(scene, objectId);
     if (object?.kind === "post") {
@@ -559,6 +611,7 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
               onChooseFanAnchor={handleChooseFanAnchor}
               onChooseFanTargetMember={handleChooseFanTargetMember}
               fanPreview={fanPreview}
+              onSelectCandidate={handleSelectCandidate}
             />
           )}
           {showThree && (
@@ -570,6 +623,8 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
               onChooseBeamAnchor={handleChooseBeamAnchor}
               onChooseFanAnchor={handleChooseFanAnchor}
               onChooseFanTargetMember={handleChooseFanTargetMember}
+              onSelectCandidate={handleSelectCandidate}
+              focusedJointId={state.focusedJointId}
             />
           )}
         </main>
@@ -605,6 +660,13 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
           onUpdateFanField={handleUpdateFanField}
           onDeleteFanField={handleDeleteFanField}
           onDeleteJoint={handleDeleteJoint}
+          unresolvedCandidates={scene.jointCandidates}
+          selectedCandidate={selectedCandidate}
+          onSelectCandidate={handleSelectCandidate}
+          onCancelCandidateSelection={handleCancelCandidateSelection}
+          onConfirmCandidate={handleConfirmCandidate}
+          onUpdateJoint={handleUpdateJoint}
+          onFocusJoint={handleFocusJoint}
         />
       </div>
 

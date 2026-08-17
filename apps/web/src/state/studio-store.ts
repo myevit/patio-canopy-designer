@@ -13,6 +13,8 @@ export interface StudioState {
   viewMode: ViewMode;
   selectedObjectId: string | null;
   selectedVertex: SelectedVertex | null;
+  selectedCandidateId: string | null;
+  focusedJointId: string | null;
   drawerTab: DrawerTab;
   drawerOpen: boolean;
 }
@@ -21,6 +23,9 @@ export type StudioAction =
   | { type: "select-tool"; tool: ToolId }
   | { type: "select-object"; objectId: string | null }
   | { type: "select-vertex"; vertex: SelectedVertex | null }
+  | { type: "select-candidate"; candidateId: string | null }
+  | { type: "focus-joint"; jointId: string }
+  | { type: "clear-joint-focus" }
   | { type: "add-outline-point"; point: Vector3Mm }
   | { type: "remove-last-outline-point" }
   | { type: "set-outline-error"; error: string | undefined }
@@ -42,6 +47,8 @@ export const initialStudioState: StudioState = {
   viewMode: "plan",
   selectedObjectId: null,
   selectedVertex: null,
+  selectedCandidateId: null,
+  focusedJointId: null,
   drawerTab: "bom",
   drawerOpen: false,
 };
@@ -70,17 +77,31 @@ export function studioReducer(state: StudioState, action: StudioAction): StudioS
         tool: action.tool,
         interaction: interactionForTool(action.tool),
         selectedVertex: null,
+        selectedCandidateId: null,
+        focusedJointId: null,
       };
     case "select-object":
       return {
         ...state,
         selectedObjectId: action.objectId,
         selectedVertex: null,
+        selectedCandidateId: null,
         interaction:
           state.tool === "select"
             ? { status: action.objectId ? "selecting" : "idle" }
             : state.interaction,
       };
+    case "select-candidate":
+      return {
+        ...state,
+        selectedCandidateId: action.candidateId,
+        selectedObjectId: null,
+        selectedVertex: null,
+      };
+    case "focus-joint":
+      return { ...state, focusedJointId: action.jointId };
+    case "clear-joint-focus":
+      return { ...state, focusedJointId: null };
     case "select-vertex":
       return {
         ...state,
@@ -153,6 +174,12 @@ export function studioReducer(state: StudioState, action: StudioAction): StudioS
     case "toggle-drawer":
       return { ...state, drawerOpen: !state.drawerOpen };
     case "escape":
-      return { ...state, tool: "select", interaction: { status: "idle" } };
+      return {
+        ...state,
+        tool: "select",
+        interaction: { status: "idle" },
+        selectedCandidateId: null,
+        focusedJointId: null,
+      };
   }
 }

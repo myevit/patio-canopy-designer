@@ -53,6 +53,8 @@ export interface ThreeViewProps {
   onChooseBeamAnchor?: (anchorId: string) => void;
   onChooseFanAnchor?: (anchorId: string) => void;
   onChooseFanTargetMember?: (memberId: string) => void;
+  onSelectCandidate?: (candidateId: string) => void;
+  focusedJointId?: string | null;
 }
 
 function handleClick(event: ThreeEvent<MouseEvent>, id: string, onSelect: (id: string) => void) {
@@ -68,9 +70,26 @@ export function ThreeView({
   onChooseBeamAnchor = () => {},
   onChooseFanAnchor = () => {},
   onChooseFanTargetMember = () => {},
+  onSelectCandidate = () => {},
+  focusedJointId = null,
 }: ThreeViewProps) {
-  const selectableObjects = [...scene.posts, ...scene.members, ...scene.joints];
-  const accessibleObjects = [...selectableObjects, ...scene.houseAnchors];
+  const focusedJoint = focusedJointId ? scene.joints.find((j) => j.id === focusedJointId) ?? null : null;
+  const visibleScene = focusedJoint
+    ? {
+        ...scene,
+        walls: [],
+        roofPlanes: [],
+        gutters: [],
+        posts: [],
+        houseAnchors: [],
+        members: scene.members.filter((m) => focusedJoint.connectedMemberIds.includes(m.id)),
+        joints: [focusedJoint],
+        jointCandidates: [],
+      }
+    : scene;
+
+  const selectableObjects = [...visibleScene.posts, ...visibleScene.members, ...visibleScene.joints];
+  const accessibleObjects = [...selectableObjects, ...visibleScene.houseAnchors];
   function handlePostClick(event: ThreeEvent<MouseEvent>, postId: string, topAnchorId: string) {
     event.stopPropagation();
     if (tool === "beam") {
@@ -98,7 +117,7 @@ export function ThreeView({
       <OrbitControls target={[3500, 1200, 2200]} />
       <gridHelper args={[10000, 20]} />
 
-      {scene.walls.map((wall) => {
+      {visibleScene.walls.map((wall) => {
         const transform = wallTransform(wall.start, wall.end, wall.heightMm);
         return (
           <mesh
@@ -113,15 +132,15 @@ export function ThreeView({
         );
       })}
 
-      {scene.roofPlanes.map((roofPlane) => (
+      {visibleScene.roofPlanes.map((roofPlane) => (
         <RoofPlaneMesh key={roofPlane.id} roofPlane={roofPlane} />
       ))}
 
-      {scene.gutters.map((gutter) => (
+      {visibleScene.gutters.map((gutter) => (
         <GutterMesh key={gutter.id} gutter={gutter} />
       ))}
 
-      {scene.posts.map((post) => {
+      {visibleScene.posts.map((post) => {
         const transform = memberTransform(post.base, post.top);
         const selected = post.id === selectedObjectId;
         return (
@@ -140,7 +159,7 @@ export function ThreeView({
         );
       })}
 
-      {scene.houseAnchors.map((anchor) => (
+      {visibleScene.houseAnchors.map((anchor) => (
         <mesh
           key={anchor.id}
           data-testid={`scene-object-${anchor.id}`}
@@ -160,7 +179,7 @@ export function ThreeView({
         </mesh>
       ))}
 
-      {scene.members.map((member) => {
+      {visibleScene.members.map((member) => {
         const transform = memberTransform(member.start, member.end);
         const selected = member.id === selectedObjectId;
         return (
@@ -179,7 +198,7 @@ export function ThreeView({
         );
       })}
 
-      {scene.joints.map((joint) => {
+      {visibleScene.joints.map((joint) => {
         const selected = joint.id === selectedObjectId;
         return (
           <mesh
@@ -195,6 +214,20 @@ export function ThreeView({
           </mesh>
         );
       })}
+
+      {tool === "joint" &&
+        visibleScene.jointCandidates.map((candidate) => (
+          <mesh
+            key={candidate.id}
+            data-testid={`scene-object-${candidate.id}`}
+            name={candidate.id}
+            position={toThreeVector(candidate.position)}
+            onClick={(event) => handleClick(event, candidate.id, onSelectCandidate)}
+          >
+            <octahedronGeometry args={[70, 0]} />
+            <meshStandardMaterial color="#f2c94c" wireframe />
+          </mesh>
+        ))}
       </Canvas>
       <div className="sr-only" role="group" aria-label="3D scene objects">
         {accessibleObjects.map((object) => (

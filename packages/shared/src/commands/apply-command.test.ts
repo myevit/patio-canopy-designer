@@ -783,6 +783,277 @@ describe("applyCommand: delete-joint", () => {
   });
 });
 
+describe("applyCommand: confirm-joint", () => {
+  function withCrossingBeams(): ProjectDocument {
+    const doc = baseDoc();
+    doc.sections.push({ id: "sec-beam", name: "Beam", widthMm: 89, heightMm: 38 });
+    doc.anchors.push(
+      { id: "a-1", kind: "free", positionMm: { x: 0, y: 500, z: 0 } },
+      { id: "a-2", kind: "free", positionMm: { x: 1000, y: 500, z: 0 } },
+      { id: "a-3", kind: "free", positionMm: { x: 500, y: 0, z: 0 } },
+      { id: "a-4", kind: "free", positionMm: { x: 500, y: 1000, z: 0 } },
+    );
+    doc.members.push(
+      { id: "m-1", role: "perimeter-beam", startAnchorId: "a-1", endAnchorId: "a-2", sectionId: "sec-beam", rollRad: 0 },
+      { id: "m-2", role: "perimeter-beam", startAnchorId: "a-3", endAnchorId: "a-4", sectionId: "sec-beam", rollRad: 0 },
+    );
+    return doc;
+  }
+
+  it("creates a joint from a detected crossing candidate", () => {
+    const doc = withCrossingBeams();
+    const result = applyCommand(doc, {
+      type: "confirm-joint",
+      jointId: "joint-1",
+      connectedMemberIds: ["m-1", "m-2"],
+      positionMm: { x: 500, y: 500, z: 0 },
+      crossingBehavior: "structural-joint",
+      engineeringStatus: "engineer-review-required",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.joints).toHaveLength(1);
+      expect(result.document.joints[0]).toMatchObject({
+        id: "joint-1",
+        connectedMemberIds: ["m-1", "m-2"],
+        crossingBehavior: "structural-joint",
+      });
+    }
+  });
+
+  it("can confirm a candidate as explicitly not touching (suppressed)", () => {
+    const doc = withCrossingBeams();
+    const result = applyCommand(doc, {
+      type: "confirm-joint",
+      jointId: "joint-1",
+      connectedMemberIds: ["m-1", "m-2"],
+      positionMm: { x: 500, y: 500, z: 0 },
+      crossingBehavior: "no-contact",
+      engineeringStatus: "check-not-implemented",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.joints[0]!.crossingBehavior).toBe("no-contact");
+    }
+  });
+
+  it("rejects a joint referencing an unknown member", () => {
+    const doc = withCrossingBeams();
+    const result = applyCommand(doc, {
+      type: "confirm-joint",
+      jointId: "joint-1",
+      connectedMemberIds: ["m-1", "missing"],
+      positionMm: { x: 500, y: 500, z: 0 },
+      crossingBehavior: "structural-joint",
+      engineeringStatus: "engineer-review-required",
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects a joint with no connected members", () => {
+    const doc = withCrossingBeams();
+    const result = applyCommand(doc, {
+      type: "confirm-joint",
+      jointId: "joint-1",
+      connectedMemberIds: [],
+      positionMm: { x: 500, y: 500, z: 0 },
+      crossingBehavior: "structural-joint",
+      engineeringStatus: "engineer-review-required",
+    });
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("applyCommand: update-joint", () => {
+  function withJoint(): ProjectDocument {
+    const doc = baseDoc();
+    doc.sections.push({ id: "sec-beam", name: "Beam", widthMm: 89, heightMm: 38 });
+    doc.anchors.push(
+      { id: "a-1", kind: "free", positionMm: { x: 0, y: 0, z: 0 } },
+      { id: "a-2", kind: "free", positionMm: { x: 1000, y: 0, z: 0 } },
+    );
+    doc.members.push({
+      id: "m-1",
+      role: "perimeter-beam",
+      startAnchorId: "a-1",
+      endAnchorId: "a-2",
+      sectionId: "sec-beam",
+      rollRad: 0,
+    });
+    doc.joints.push({
+      id: "joint-1",
+      connectedMemberIds: ["m-1"],
+      positionMm: { x: 500, y: 0, z: 0 },
+      crossingBehavior: "unresolved",
+      engineeringStatus: "input-requires-verification",
+    });
+    return doc;
+  }
+
+  it("changes a joint's crossing behavior and engineering status", () => {
+    const doc = withJoint();
+    const result = applyCommand(doc, {
+      type: "update-joint",
+      jointId: "joint-1",
+      patch: { crossingBehavior: "half-lap", engineeringStatus: "engineer-review-required" },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.joints[0]!.crossingBehavior).toBe("half-lap");
+      expect(result.document.joints[0]!.engineeringStatus).toBe("engineer-review-required");
+    }
+  });
+
+  it("can suppress a confirmed joint by switching it to no-contact", () => {
+    const doc = withJoint();
+    const result = applyCommand(doc, {
+      type: "update-joint",
+      jointId: "joint-1",
+      patch: { crossingBehavior: "no-contact" },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.joints[0]!.crossingBehavior).toBe("no-contact");
+    }
+  });
+
+  it("allows nudging a joint's geometric position", () => {
+    const doc = withJoint();
+    const result = applyCommand(doc, {
+      type: "update-joint",
+      jointId: "joint-1",
+      patch: { positionMm: { x: 520, y: 10, z: 0 } },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.joints[0]!.positionMm).toEqual({ x: 520, y: 10, z: 0 });
+    }
+  });
+
+  it("rejects updating an unknown joint", () => {
+    const doc = withJoint();
+    const result = applyCommand(doc, { type: "update-joint", jointId: "missing", patch: { crossingBehavior: "half-lap" } });
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("applyCommand: joint regeneration on move", () => {
+  function withPostsBeamAndJoint(): ProjectDocument {
+    const doc = baseDoc();
+    doc.sections.push({ id: "sec-post", name: "Post", widthMm: 140, heightMm: 140 });
+    doc.sections.push({ id: "sec-beam", name: "Beam", widthMm: 89, heightMm: 38 });
+    const withPostA = applyCommand(doc, {
+      type: "add-post",
+      postId: "post-a",
+      baseAnchorId: "anchor-base-a",
+      topAnchorId: "anchor-top-a",
+      sectionId: "sec-post",
+      heightMm: 2400,
+      position: { x: 0, y: 0, z: 0 },
+    });
+    if (!withPostA.ok) throw new Error("setup failed");
+    const withPostB = applyCommand(withPostA.document, {
+      type: "add-post",
+      postId: "post-b",
+      baseAnchorId: "anchor-base-b",
+      topAnchorId: "anchor-top-b",
+      sectionId: "sec-post",
+      heightMm: 2400,
+      position: { x: 1000, y: 0, z: 0 },
+    });
+    if (!withPostB.ok) throw new Error("setup failed");
+    const withBeam = applyCommand(withPostB.document, {
+      type: "add-beam",
+      memberId: "beam-1",
+      startAnchorId: "anchor-top-a",
+      endAnchorId: "anchor-top-b",
+      sectionId: "sec-beam",
+    });
+    if (!withBeam.ok) throw new Error("setup failed");
+    const withOtherAnchor = applyCommand(withBeam.document, {
+      type: "add-house-anchor",
+      anchorId: "anchor-other",
+      position: { x: 500, y: 500, z: 2400 },
+    });
+    if (!withOtherAnchor.ok) throw new Error("setup failed");
+    const withSecondBeam = applyCommand(withOtherAnchor.document, {
+      type: "add-beam",
+      memberId: "beam-2",
+      startAnchorId: "anchor-top-a",
+      endAnchorId: "anchor-other",
+      sectionId: "sec-beam",
+    });
+    if (!withSecondBeam.ok) throw new Error("setup failed");
+    const doc2 = withSecondBeam.document;
+    doc2.joints.push({
+      id: "joint-1",
+      connectedMemberIds: ["beam-1", "beam-2"],
+      positionMm: { x: 0, y: 0, z: 2400 },
+      crossingBehavior: "structural-joint",
+      engineeringStatus: "engineer-review-required",
+    });
+    return doc2;
+  }
+
+  it("regenerates a joint's position when a connected post moves", () => {
+    const doc = withPostsBeamAndJoint();
+    const result = applyCommand(doc, { type: "move-post", postId: "post-a", position: { x: 200, y: 0, z: 0 } });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const joint = result.document.joints.find((j) => j.id === "joint-1")!;
+      expect(joint.positionMm).toEqual({ x: 200, y: 0, z: 2400 });
+      expect(joint.crossingBehavior).toBe("structural-joint");
+    }
+  });
+
+  it("flags a joint as needing resolution once its connected post moves away entirely", () => {
+    const doc = withPostsBeamAndJoint();
+    const result = applyCommand(doc, {
+      type: "delete-beam",
+      memberId: "beam-1",
+    });
+    // beam-1 is still referenced by joint-1, so this should be blocked rather than orphaning the joint.
+    expect(result.ok).toBe(false);
+  });
+
+  it("marks a joint unresolved when a move breaks a crossing connection", () => {
+    const doc = baseDoc();
+    doc.sections.push({ id: "sec-post", name: "Post", widthMm: 140, heightMm: 140 });
+    doc.sections.push({ id: "sec-beam", name: "Beam", widthMm: 89, heightMm: 38 });
+    doc.anchors.push(
+      { id: "anchor-base-a", kind: "post-base", positionMm: { x: 0, y: 500, z: 0 } },
+      { id: "anchor-top-a", kind: "post-top", positionMm: { x: 0, y: 500, z: 2400 } },
+      { id: "anchor-base-b", kind: "post-base", positionMm: { x: 1000, y: 500, z: 0 } },
+      { id: "anchor-top-b", kind: "post-top", positionMm: { x: 1000, y: 500, z: 2400 } },
+      { id: "anchor-cross-1", kind: "free", positionMm: { x: 500, y: 0, z: 2400 } },
+      { id: "anchor-cross-2", kind: "free", positionMm: { x: 500, y: 1000, z: 2400 } },
+    );
+    doc.posts.push(
+      { id: "post-a", baseAnchorId: "anchor-base-a", topAnchorId: "anchor-top-a", sectionId: "sec-post", heightMm: 2400 },
+      { id: "post-b", baseAnchorId: "anchor-base-b", topAnchorId: "anchor-top-b", sectionId: "sec-post", heightMm: 2400 },
+    );
+    doc.members.push(
+      { id: "beam-1", role: "perimeter-beam", startAnchorId: "anchor-top-a", endAnchorId: "anchor-top-b", sectionId: "sec-beam", rollRad: 0 },
+      { id: "beam-2", role: "perimeter-beam", startAnchorId: "anchor-cross-1", endAnchorId: "anchor-cross-2", sectionId: "sec-beam", rollRad: 0 },
+    );
+    doc.joints.push({
+      id: "joint-1",
+      connectedMemberIds: ["beam-1", "beam-2"],
+      positionMm: { x: 500, y: 500, z: 2400 },
+      crossingBehavior: "structural-joint",
+      engineeringStatus: "engineer-review-required",
+    });
+
+    const result = applyCommand(doc, { type: "move-post", postId: "post-a", position: { x: 0, y: 8000, z: 0 } });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const joint = result.document.joints.find((j) => j.id === "joint-1")!;
+      expect(joint.crossingBehavior).toBe("unresolved");
+      expect(joint.engineeringStatus).toBe("input-requires-verification");
+    }
+  });
+});
+
 describe("applyCommand: fan fields", () => {
   function withSourceAndTarget(): ProjectDocument {
     const doc = baseDoc();

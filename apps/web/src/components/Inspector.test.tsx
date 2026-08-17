@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { SceneObject, SceneRoofPlane } from "@canopy/geometry";
+import type { SceneJointCandidate, SceneObject, SceneRoofPlane } from "@canopy/geometry";
 import type { FanField } from "@canopy/shared";
 import { createFanDraft } from "../state/fan-draft.js";
 import { Inspector } from "./Inspector.js";
@@ -53,6 +53,8 @@ describe("Inspector", () => {
       kind: "joint",
       position: { x: 1, y: 2, z: 3 },
       connectedMemberIds: ["member-1", "member-2"],
+      crossingBehavior: "unresolved",
+      engineeringStatus: "engineer-review-required",
     };
     render(<Inspector selected={joint} />);
     expect(screen.getByText("joint-1")).toBeInTheDocument();
@@ -66,6 +68,8 @@ describe("Inspector", () => {
       kind: "joint",
       position: { x: 1, y: 2, z: 3 },
       connectedMemberIds: ["member-1", "member-2"],
+      crossingBehavior: "unresolved",
+      engineeringStatus: "engineer-review-required",
     };
     const onDeleteJoint = vi.fn();
     render(<Inspector selected={joint} onDeleteJoint={onDeleteJoint} />);
@@ -769,5 +773,117 @@ describe("Inspector keyboard post placement panel", () => {
     fireEvent.click(screen.getByRole("button", { name: /^clear$/i }));
     expect(screen.getByLabelText(/^x \(mm\)/i)).toHaveValue(0);
     expect(screen.getByLabelText(/^y \(mm\)/i)).toHaveValue(0);
+  });
+});
+
+describe("Inspector detected joint candidates", () => {
+  const candidates: SceneJointCandidate[] = [
+    {
+      id: "candidate::crossing::member-1::member-2",
+      kind: "joint-candidate",
+      candidateKind: "crossing",
+      memberIds: ["member-1", "member-2"],
+      position: { x: 500, y: 500, z: 0 },
+    },
+  ];
+
+  it("lists unresolved candidates when the Joint tool is active and none is selected", () => {
+    render(<Inspector selected={undefined} tool="joint" unresolvedCandidates={candidates} />);
+    expect(screen.getByText(/member-1/)).toBeInTheDocument();
+    expect(screen.getByText(/member-2/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /review/i })).toBeInTheDocument();
+  });
+
+  it("selects a candidate for review", () => {
+    const onSelectCandidate = vi.fn();
+    render(
+      <Inspector
+        selected={undefined}
+        tool="joint"
+        unresolvedCandidates={candidates}
+        onSelectCandidate={onSelectCandidate}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /review/i }));
+    expect(onSelectCandidate).toHaveBeenCalledWith("candidate::crossing::member-1::member-2");
+  });
+
+  it("shows a message when the Joint tool is active with no unresolved candidates", () => {
+    render(<Inspector selected={undefined} tool="joint" unresolvedCandidates={[]} />);
+    expect(screen.getByText(/no unresolved connections/i)).toBeInTheDocument();
+  });
+
+  it("confirms a selected candidate as a structural joint", () => {
+    const onConfirmCandidate = vi.fn().mockReturnValue({ ok: true });
+    render(
+      <Inspector
+        selected={undefined}
+        tool="joint"
+        unresolvedCandidates={candidates}
+        selectedCandidate={candidates[0]}
+        onConfirmCandidate={onConfirmCandidate}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/crossing behavior/i), { target: { value: "structural-joint" } });
+    fireEvent.change(screen.getByLabelText(/engineering status/i), { target: { value: "engineer-review-required" } });
+    fireEvent.click(screen.getByRole("button", { name: /create joint/i }));
+    expect(onConfirmCandidate).toHaveBeenCalledWith(candidates[0], "structural-joint", "engineer-review-required");
+  });
+
+  it("cancels a candidate selection", () => {
+    const onCancelCandidateSelection = vi.fn();
+    render(
+      <Inspector
+        selected={undefined}
+        tool="joint"
+        unresolvedCandidates={candidates}
+        selectedCandidate={candidates[0]}
+        onCancelCandidateSelection={onCancelCandidateSelection}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(onCancelCandidateSelection).toHaveBeenCalled();
+  });
+});
+
+describe("Inspector confirmed joint editing", () => {
+  const joint: SceneObject = {
+    id: "joint-1",
+    kind: "joint",
+    position: { x: 500, y: 500, z: 0 },
+    connectedMemberIds: ["member-1", "member-2"],
+    crossingBehavior: "structural-joint",
+    engineeringStatus: "engineer-review-required",
+  };
+
+  it("changes crossing behavior, including suppressing it as no-contact", () => {
+    const onUpdateJoint = vi.fn().mockReturnValue({ ok: true });
+    render(<Inspector selected={joint} onUpdateJoint={onUpdateJoint} />);
+    fireEvent.change(screen.getByLabelText(/crossing behavior/i), { target: { value: "no-contact" } });
+    expect(onUpdateJoint).toHaveBeenCalledWith("joint-1", { crossingBehavior: "no-contact" });
+  });
+
+  it("changes engineering status", () => {
+    const onUpdateJoint = vi.fn().mockReturnValue({ ok: true });
+    render(<Inspector selected={joint} onUpdateJoint={onUpdateJoint} />);
+    fireEvent.change(screen.getByLabelText(/engineering status/i), {
+      target: { value: "input-requires-verification" },
+    });
+    expect(onUpdateJoint).toHaveBeenCalledWith("joint-1", { engineeringStatus: "input-requires-verification" });
+  });
+
+  it("edits the joint's geometric position", () => {
+    const onUpdateJoint = vi.fn().mockReturnValue({ ok: true });
+    render(<Inspector selected={joint} onUpdateJoint={onUpdateJoint} />);
+    fireEvent.change(screen.getByLabelText(/position x/i), { target: { value: "520" } });
+    fireEvent.blur(screen.getByLabelText(/position x/i));
+    expect(onUpdateJoint).toHaveBeenCalledWith("joint-1", { positionMm: { x: 520, y: 500, z: 0 } });
+  });
+
+  it("enters focused 3D inspection for the selected joint", () => {
+    const onFocusJoint = vi.fn();
+    render(<Inspector selected={joint} onFocusJoint={onFocusJoint} />);
+    fireEvent.click(screen.getByRole("button", { name: /inspect in 3d/i }));
+    expect(onFocusJoint).toHaveBeenCalledWith("joint-1");
   });
 });

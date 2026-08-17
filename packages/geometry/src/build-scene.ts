@@ -1,4 +1,5 @@
 import type { Anchor, HouseOutline, ProjectDocument, Section, Vector3Mm } from "@canopy/shared";
+import { findUnresolvedJointCandidates } from "@canopy/shared";
 import { deriveGutter, deriveRoofOutline } from "./derive-roof.js";
 import type { SceneWall, ScenePrimitives } from "./scene-types.js";
 
@@ -123,6 +124,15 @@ export function buildScene(document: ProjectDocument): ScenePrimitives {
       kind: "joint" as const,
       position: joint.positionMm,
       connectedMemberIds: joint.connectedMemberIds,
+      crossingBehavior: joint.crossingBehavior,
+      engineeringStatus: joint.engineeringStatus,
+    })),
+    jointCandidates: findUnresolvedJointCandidates(document).map((candidate) => ({
+      id: candidate.id,
+      kind: "joint-candidate" as const,
+      candidateKind: candidate.kind,
+      memberIds: candidate.memberIds,
+      position: candidate.positionMm,
     })),
     houseAnchors: document.anchors
       .filter((anchor) => anchor.kind === "house")

@@ -36,8 +36,16 @@ function scene(): ScenePrimitives {
       },
     ],
     joints: [
-      { id: "joint-1", kind: "joint", position: { x: 0, y: 0, z: 2500 }, connectedMemberIds: ["member-1"] },
+      {
+        id: "joint-1",
+        kind: "joint",
+        position: { x: 0, y: 0, z: 2500 },
+        connectedMemberIds: ["member-1"],
+        crossingBehavior: "unresolved",
+        engineeringStatus: "engineer-review-required",
+      },
     ],
+    jointCandidates: [],
     houseAnchors: [],
   };
 }
