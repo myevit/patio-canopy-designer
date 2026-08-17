@@ -337,7 +337,7 @@ export function PlanView({
         <line
           key={gutter.id}
           data-testid={`gutter-${gutter.id}`}
-          className="plan-view__gutter"
+          className={tool === "beam" ? "plan-view__gutter plan-view__gutter--beam" : "plan-view__gutter"}
           x1={gutter.start.x}
           y1={gutter.start.y}
           x2={gutter.end.x}

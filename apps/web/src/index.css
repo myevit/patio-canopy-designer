@@ -132,6 +132,18 @@ body {
   cursor: pointer;
 }
 
+.plan-view__gutter {
+  stroke: #b5943a;
+  stroke-width: 14;
+  pointer-events: none;
+}
+
+.plan-view__gutter--beam {
+  stroke: #f2a600;
+  stroke-width: 18;
+  cursor: pointer;
+}
+
 .plan-view [role="button"]:focus-visible {
   outline: none;
   stroke: #0b63ce;

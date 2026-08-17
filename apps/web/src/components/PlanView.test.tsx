@@ -662,7 +662,15 @@ describe("PlanView roof and gutter rendering", () => {
 
   it("renders a gutter line for each scene gutter", () => {
     render(<PlanView scene={sceneWithRoofOverHouse()} selectedObjectId={null} onSelect={() => {}} />);
-    expect(screen.getByTestId("gutter-gutter-1")).toBeInTheDocument();
+    const gutter = screen.getByTestId("gutter-gutter-1");
+    expect(gutter).toBeInTheDocument();
+    expect(gutter).toHaveClass("plan-view__gutter");
+  });
+
+  it("adds the beam variant class to a gutter while the Beam tool is active", () => {
+    render(<PlanView scene={sceneWithRoofOverHouse()} selectedObjectId={null} onSelect={() => {}} tool="beam" />);
+    const gutter = screen.getByTestId("gutter-gutter-1");
+    expect(gutter).toHaveClass("plan-view__gutter", "plan-view__gutter--beam");
   });
 
   it("still selects the house outline underneath when the roof polygon fully covers it", async () => {
