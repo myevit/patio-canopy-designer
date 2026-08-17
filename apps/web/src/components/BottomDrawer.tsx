@@ -5,12 +5,14 @@ const TABS: { id: DrawerTab; label: string }[] = [
   { id: "bom", label: "BOM" },
   { id: "cuts", label: "Cuts" },
   { id: "blueprints", label: "Blueprints" },
+  { id: "analysis", label: "Analysis" },
 ];
 
 const TAB_DESCRIPTIONS: Record<DrawerTab, string> = {
   bom: "Bill of materials",
   cuts: "Cut list",
   blueprints: "Blueprint sheets",
+  analysis: "Component analysis",
 };
 
 export interface BottomDrawerProps {
@@ -21,6 +23,7 @@ export interface BottomDrawerProps {
   bomContent?: ReactNode;
   cutsContent?: ReactNode;
   blueprintsContent?: ReactNode;
+  analysisContent?: ReactNode;
 }
 
 export function BottomDrawer({
@@ -31,11 +34,13 @@ export function BottomDrawer({
   bomContent,
   cutsContent,
   blueprintsContent,
+  analysisContent,
 }: BottomDrawerProps) {
   const content: Record<DrawerTab, ReactNode> = {
     bom: bomContent ?? <p>{TAB_DESCRIPTIONS.bom}: not available in this milestone.</p>,
     cuts: cutsContent ?? <p>{TAB_DESCRIPTIONS.cuts}: not available in this milestone.</p>,
     blueprints: blueprintsContent ?? <p>{TAB_DESCRIPTIONS.blueprints}: not available in this milestone.</p>,
+    analysis: analysisContent ?? <p>{TAB_DESCRIPTIONS.analysis}: not available in this milestone.</p>,
   };
   return (
     <section aria-label="Output drawer" className={open ? "drawer drawer--open" : "drawer drawer--closed"}>

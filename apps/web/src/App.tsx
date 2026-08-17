@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useReducer, useRef } from "react";
+import { freezeAnalysisSnapshot } from "@canopy/calculations";
 import {
   buildBlueprintSheetSet,
   buildCutFabrication,
@@ -23,6 +24,7 @@ import {
   type Section,
   type Vector3Mm,
 } from "@canopy/shared";
+import { AnalysisPanel } from "./components/AnalysisPanel.js";
 import { BlueprintsPanel } from "./components/BlueprintsPanel.js";
 import { BomPanel } from "./components/BomPanel.js";
 import { BottomDrawer } from "./components/BottomDrawer.js";
@@ -100,6 +102,10 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
   const cutCards = useMemo(() => buildCutFabrication(documentController.document), [documentController.document]);
   const blueprintSheetSet = useMemo(
     () => buildBlueprintSheetSet(documentController.document, { generatedAt: new Date().toISOString() }),
+    [documentController.document],
+  );
+  const analysisSnapshot = useMemo(
+    () => freezeAnalysisSnapshot(documentController.document, new Date().toISOString()),
     [documentController.document],
   );
 
@@ -751,6 +757,7 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
         }
         cutsContent={<CutsPanel cards={cutCards} />}
         blueprintsContent={<BlueprintsPanel sheetSet={blueprintSheetSet} onPrint={handlePrintBlueprints} />}
+        analysisContent={<AnalysisPanel snapshot={analysisSnapshot} />}
       />
     </div>
   );

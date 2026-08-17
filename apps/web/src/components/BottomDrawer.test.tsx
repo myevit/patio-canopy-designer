@@ -4,11 +4,25 @@ import userEvent from "@testing-library/user-event";
 import { BottomDrawer } from "./BottomDrawer.js";
 
 describe("BottomDrawer", () => {
-  it("renders BOM, Cuts, and Blueprints tabs", () => {
+  it("renders BOM, Cuts, Blueprints, and Analysis tabs", () => {
     render(<BottomDrawer open tab="bom" onSelectTab={() => {}} onToggleOpen={() => {}} />);
-    for (const name of ["BOM", "Cuts", "Blueprints"]) {
+    for (const name of ["BOM", "Cuts", "Blueprints", "Analysis"]) {
       expect(screen.getByRole("tab", { name })).toBeInTheDocument();
     }
+  });
+
+  it("renders the given analysisContent instead of the placeholder when the Analysis tab is active", () => {
+    render(
+      <BottomDrawer
+        open
+        tab="analysis"
+        onSelectTab={() => {}}
+        onToggleOpen={() => {}}
+        analysisContent={<p>Custom analysis content</p>}
+      />,
+    );
+    expect(screen.getByText("Custom analysis content")).toBeInTheDocument();
+    expect(screen.queryByText(/not available in this milestone/i)).not.toBeInTheDocument();
   });
 
   it("marks the active tab as selected and shows a not-yet-available placeholder", () => {

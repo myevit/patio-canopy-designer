@@ -5,7 +5,7 @@ import type { SelectedVertex } from "./selected-vertex.js";
 import type { ToolId } from "./tool.js";
 
 export type ViewMode = "plan" | "split" | "3d";
-export type DrawerTab = "bom" | "cuts" | "blueprints";
+export type DrawerTab = "bom" | "cuts" | "blueprints" | "analysis";
 
 export interface StudioState {
   tool: ToolId;

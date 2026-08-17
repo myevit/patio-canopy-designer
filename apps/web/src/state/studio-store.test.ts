@@ -66,6 +66,12 @@ describe("studioReducer", () => {
     expect(next.drawerOpen).toBe(true);
   });
 
+  it("opens the drawer on the analysis tab", () => {
+    const next = studioReducer(initialStudioState, { type: "set-drawer-tab", tab: "analysis" });
+    expect(next.drawerTab).toBe("analysis");
+    expect(next.drawerOpen).toBe(true);
+  });
+
   it("toggles the drawer open state", () => {
     const opened = studioReducer(initialStudioState, { type: "toggle-drawer" });
     expect(opened.drawerOpen).toBe(true);
