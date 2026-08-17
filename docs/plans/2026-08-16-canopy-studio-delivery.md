@@ -220,6 +220,64 @@ Acceptance:
 - Every calculator has a failing test first, closed-form benchmarks, equilibrium checks, unit invariance, and adversarial unsupported cases.
 - No result uses `safe`, `approved`, `certified`, or `permit ready`.
 
+## Milestone 8 — Permit package
+
+**Artifact:** A coordinated permit-assist package that consumes the frozen
+validated model, analysis results, BOM, and blueprints, clearly labelled as
+preliminary planning material that assists — and never replaces — the
+permit/engineer process. The attached irregular saddle is an addition to the
+house and follows the Edmonton home-addition documentation path; the app
+must never apply or imitate a professional (APEGA) stamp.
+
+Sheets:
+1. Site-plan draft — property lines, setbacks, house/patio/canopy footprints
+   sourced from the canonical model where present, north arrow,
+   address/zone fields with provenance (or an explicit "not provided"
+   marker when the model lacks them).
+2. Dimensioned plan and elevations — reuses the Milestone 6 blueprint
+   projection engine; no independent dimensioning logic.
+3. Post/footing layout — independent frost-depth footing callouts outside
+   the patio footprint; crude callout geometry only, no engineering
+   approval implied.
+4. Member schedule — reproduces the Milestone 5 BOM verbatim; never an
+   independently derived count.
+5. Structural summary — reproduces Milestone 7 analysis results with their
+   fail-closed statuses and provenance, an unresolved-items schedule, and
+   an explicit engineer-review-required banner for the attached irregular
+   saddle regardless of component screening outcomes.
+6. Assumptions sheet — units, tolerance, model source/revision, and
+   jurisdiction/edition fields with provenance, plus stated limitations.
+
+Scope:
+- `PermitPackage` tab in the BottomDrawer, alongside BOM/Cuts/Blueprints/
+  Analysis.
+- Print/PDF export reusing the existing blueprint print pathway.
+- An always-visible disclaimer: this is not a permit approval, does not
+  claim code compliance, and requires professional/permit review before
+  construction.
+- Deterministic assembly: the same document revision always produces the
+  same package.
+
+Must refuse / must never do:
+- Never claim code compliance or "permit ready."
+- Never apply, render, or imitate any professional/APEGA stamp or seal.
+- Never let the structural summary drop or reword a fail-closed status or
+  the saddle's engineer-review-required banner.
+- Never let a sheet's callout, member count, or status diverge from its
+  source (BOM, analysis, blueprint) — cross-sheet consistency is a
+  correctness requirement, not a display nicety.
+
+Acceptance:
+- Package assembly is deterministic for a given document revision.
+- Every cross-sheet reference resolves: member schedule entries match the
+  BOM 1:1, structural statuses match the analysis output verbatim,
+  blueprint callouts resolve to live objects.
+- The assumptions sheet always states model source, revision, and
+  jurisdiction/edition provenance.
+- The no-stamp / no-code-compliance / professional-review-required
+  disclaimer is present and visible on every sheet and cannot be
+  suppressed.
+
 ## Later kernel boundary
 
 Day one:

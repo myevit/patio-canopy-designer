@@ -369,6 +369,37 @@ body {
   display: none;
 }
 
+/* Print-only duplicate of the permit package (see PermitPrintPackage); hidden
+   on screen, shown only under @media print, same pattern as the blueprint
+   print package it nests. */
+.permit-print-package {
+  display: none;
+}
+
+@media print {
+  .permit-package-panel__screen {
+    display: none;
+  }
+
+  .permit-print-package {
+    display: block;
+  }
+
+  .permit-print-package__page {
+    margin: 0;
+  }
+
+  .permit-print-package__page[data-page-break="before"] {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .permit-print-package__page[data-page-break="start"] {
+    break-before: auto;
+    page-break-before: avoid;
+  }
+}
+
 @media print {
   @page {
     size: A3 landscape;

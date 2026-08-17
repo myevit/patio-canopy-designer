@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useReducer, useRef } from "react";
-import { freezeAnalysisSnapshot } from "@canopy/calculations";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { freezeAnalysisSnapshot, type MemberAnalysisReport, type PostAnalysisReport } from "@canopy/calculations";
 import {
   buildBlueprintSheetSet,
   buildCutFabrication,
@@ -39,6 +39,7 @@ import {
   type PostPatch,
   type RoofPlanePatch,
 } from "./components/Inspector.js";
+import { PermitPackagePanel } from "./components/PermitPackagePanel.js";
 import { PlanView } from "./components/PlanView.js";
 import { ProjectMenu } from "./components/ProjectMenu.js";
 import { StatusBar } from "./components/StatusBar.js";
@@ -90,6 +91,19 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
   const documentController = useDocumentController(SAMPLE_PROJECT);
   const persistence = useProjectPersistence(documentController, persistenceAdapter);
 
+  const [memberAnalysisReports, setMemberAnalysisReports] = useState<Record<string, MemberAnalysisReport>>({});
+  const [postAnalysisReports, setPostAnalysisReports] = useState<Record<string, PostAnalysisReport>>({});
+  const memberAnalysisReportList = useMemo(() => Object.values(memberAnalysisReports), [memberAnalysisReports]);
+  const postAnalysisReportList = useMemo(() => Object.values(postAnalysisReports), [postAnalysisReports]);
+
+  function handleMemberAnalyzed(report: MemberAnalysisReport) {
+    setMemberAnalysisReports((prev) => ({ ...prev, [report.memberId]: report }));
+  }
+
+  function handlePostAnalyzed(report: PostAnalysisReport) {
+    setPostAnalysisReports((prev) => ({ ...prev, [report.postId]: report }));
+  }
+
   const scene = useMemo(() => buildScene(documentController.document), [documentController.document]);
   const topologyIssues = useMemo(
     () => findTopologyIssues(documentController.document),
@@ -108,6 +122,7 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
     () => freezeAnalysisSnapshot(documentController.document, new Date().toISOString()),
     [documentController.document],
   );
+  const permitPackageGeneratedAt = useMemo(() => new Date().toISOString(), [documentController.document]);
 
   function dispatchGatedCommand(command: DocumentCommand): { ok: true } | { ok: false; error: string } {
     if (!persistence.loaded) {
@@ -610,6 +625,10 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
     window.print();
   }
 
+  function handlePrintPermitPackage() {
+    window.print();
+  }
+
   function handleImport(file: File) {
     void file.text().then((text) => {
       const result = importProjectDocument(text);
@@ -757,7 +776,23 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
         }
         cutsContent={<CutsPanel cards={cutCards} />}
         blueprintsContent={<BlueprintsPanel sheetSet={blueprintSheetSet} onPrint={handlePrintBlueprints} />}
-        analysisContent={<AnalysisPanel snapshot={analysisSnapshot} />}
+        analysisContent={
+          <AnalysisPanel
+            snapshot={analysisSnapshot}
+            onMemberAnalyzed={handleMemberAnalyzed}
+            onPostAnalyzed={handlePostAnalyzed}
+          />
+        }
+        permitPackageContent={
+          <PermitPackagePanel
+            document={documentController.document}
+            generatedAt={permitPackageGeneratedAt}
+            memberAnalysisReports={memberAnalysisReportList}
+            postAnalysisReports={postAnalysisReportList}
+            onPrint={handlePrintPermitPackage}
+            onSelectObject={(objectId) => dispatch({ type: "select-object", objectId })}
+          />
+        }
       />
     </div>
   );

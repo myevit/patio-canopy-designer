@@ -13,6 +13,8 @@ import { useMemo, useState } from "react";
 
 export interface AnalysisPanelProps {
   snapshot: AnalysisSnapshot;
+  onMemberAnalyzed?: (report: MemberAnalysisReport) => void;
+  onPostAnalyzed?: (report: PostAnalysisReport) => void;
 }
 
 function parseOptionalNumber(text: string): number | undefined {
@@ -38,7 +40,7 @@ function LoadProvenanceList({ entries }: { entries: AnalyzedLoadProvenance[] }) 
   );
 }
 
-export function AnalysisPanel({ snapshot }: AnalysisPanelProps) {
+export function AnalysisPanel({ snapshot, onMemberAnalyzed, onPostAnalyzed }: AnalysisPanelProps) {
   const doc = snapshot.document;
 
   const eligibleMembers = useMemo(
@@ -88,19 +90,19 @@ export function AnalysisPanel({ snapshot }: AnalysisPanelProps) {
           }
         : undefined;
     const userEnteredLoadProvenance: LoadProvenance = { source: "user-entered", label: "User-entered uniform load" };
-    setMemberReport(
-      analyzeMember(snapshot, {
-        memberId: selectedMemberId,
-        loads:
-          wNPerMm !== undefined
-            ? [{ case: { kind: "uniform", wNPerMm }, kind: "user-defined", provenance: userEnteredLoadProvenance }]
-            : [],
-        elasticModulusMPa: parseOptionalNumber(elasticModulus),
-        momentOfInertiaMm4: parseOptionalNumber(momentOfInertia),
-        bearing,
-        jurisdiction,
-      }),
-    );
+    const report = analyzeMember(snapshot, {
+      memberId: selectedMemberId,
+      loads:
+        wNPerMm !== undefined
+          ? [{ case: { kind: "uniform", wNPerMm }, kind: "user-defined", provenance: userEnteredLoadProvenance }]
+          : [],
+      elasticModulusMPa: parseOptionalNumber(elasticModulus),
+      momentOfInertiaMm4: parseOptionalNumber(momentOfInertia),
+      bearing,
+      jurisdiction,
+    });
+    setMemberReport(report);
+    onMemberAnalyzed?.(report);
   }
 
   function runPostCheck() {
@@ -113,22 +115,22 @@ export function AnalysisPanel({ snapshot }: AnalysisPanelProps) {
             allowableBearingCapacityKPa: parseOptionalNumber(allowableBearingCapacity),
           }
         : undefined;
-    setPostReport(
-      analyzePost(snapshot, {
-        postId: selectedPostId,
-        load: {
-          axialLoadN: Number(axialLoad) || 0,
-          endMomentNmm: Number(endMoment) || 0,
-          kind: "user-defined",
-          provenance: { source: "user-entered", label: "User-entered axial load and end moment" },
-        },
-        unbracedLengthMm: parseOptionalNumber(unbracedLength),
-        allowableCompressionStressMPa: parseOptionalNumber(allowableCompression),
-        allowableBendingStressMPa: parseOptionalNumber(allowableBending),
-        footing,
-        jurisdiction,
-      }),
-    );
+    const report = analyzePost(snapshot, {
+      postId: selectedPostId,
+      load: {
+        axialLoadN: Number(axialLoad) || 0,
+        endMomentNmm: Number(endMoment) || 0,
+        kind: "user-defined",
+        provenance: { source: "user-entered", label: "User-entered axial load and end moment" },
+      },
+      unbracedLengthMm: parseOptionalNumber(unbracedLength),
+      allowableCompressionStressMPa: parseOptionalNumber(allowableCompression),
+      allowableBendingStressMPa: parseOptionalNumber(allowableBending),
+      footing,
+      jurisdiction,
+    });
+    setPostReport(report);
+    onPostAnalyzed?.(report);
   }
 
 

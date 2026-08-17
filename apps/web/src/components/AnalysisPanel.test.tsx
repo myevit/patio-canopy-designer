@@ -2,7 +2,7 @@ import { freezeAnalysisSnapshot } from "@canopy/calculations";
 import { CURRENT_SCHEMA_VERSION, type ProjectDocument } from "@canopy/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AnalysisPanel } from "./AnalysisPanel.js";
 
 function twoPostFrame(): ProjectDocument {
@@ -111,5 +111,23 @@ describe("AnalysisPanel", () => {
     document.members[0]!.role = "ledger";
     render(<AnalysisPanel snapshot={snapshotFor(document)} />);
     expect(screen.getByText(/no member is in an explicitly supported analysis scope/i)).toBeInTheDocument();
+  });
+
+  it("reports a computed member analysis result to onMemberAnalyzed so it can be reproduced elsewhere (e.g. the permit package)", async () => {
+    const user = userEvent.setup();
+    const onMemberAnalyzed = vi.fn();
+    render(<AnalysisPanel snapshot={snapshotFor(twoPostFrame())} onMemberAnalyzed={onMemberAnalyzed} />);
+    await user.click(screen.getByRole("button", { name: /run member check/i }));
+    expect(onMemberAnalyzed).toHaveBeenCalledTimes(1);
+    expect(onMemberAnalyzed).toHaveBeenCalledWith(expect.objectContaining({ memberId: "beam-1" }));
+  });
+
+  it("reports a computed post analysis result to onPostAnalyzed so it can be reproduced elsewhere (e.g. the permit package)", async () => {
+    const user = userEvent.setup();
+    const onPostAnalyzed = vi.fn();
+    render(<AnalysisPanel snapshot={snapshotFor(twoPostFrame())} onPostAnalyzed={onPostAnalyzed} />);
+    await user.click(screen.getByRole("button", { name: /run post check/i }));
+    expect(onPostAnalyzed).toHaveBeenCalledTimes(1);
+    expect(onPostAnalyzed).toHaveBeenCalledWith(expect.objectContaining({ postId: "post-a" }));
   });
 });

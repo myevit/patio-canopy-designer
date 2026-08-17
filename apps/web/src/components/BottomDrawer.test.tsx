@@ -4,11 +4,25 @@ import userEvent from "@testing-library/user-event";
 import { BottomDrawer } from "./BottomDrawer.js";
 
 describe("BottomDrawer", () => {
-  it("renders BOM, Cuts, Blueprints, and Analysis tabs", () => {
+  it("renders BOM, Cuts, Blueprints, Analysis, and Permit package tabs", () => {
     render(<BottomDrawer open tab="bom" onSelectTab={() => {}} onToggleOpen={() => {}} />);
-    for (const name of ["BOM", "Cuts", "Blueprints", "Analysis"]) {
+    for (const name of ["BOM", "Cuts", "Blueprints", "Analysis", "Permit package"]) {
       expect(screen.getByRole("tab", { name })).toBeInTheDocument();
     }
+  });
+
+  it("renders the given permitPackageContent instead of the placeholder when the Permit package tab is active", () => {
+    render(
+      <BottomDrawer
+        open
+        tab="permit-package"
+        onSelectTab={() => {}}
+        onToggleOpen={() => {}}
+        permitPackageContent={<p>Custom permit package content</p>}
+      />,
+    );
+    expect(screen.getByText("Custom permit package content")).toBeInTheDocument();
+    expect(screen.queryByText(/not available in this milestone/i)).not.toBeInTheDocument();
   });
 
   it("renders the given analysisContent instead of the placeholder when the Analysis tab is active", () => {
