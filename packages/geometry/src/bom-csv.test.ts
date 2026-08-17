@@ -50,4 +50,33 @@ describe("toBomCsv", () => {
     const csv = toBomCsv([row({ fitsStandardStock: false })], SECTIONS, MATERIALS);
     expect(csv).toContain(",No,");
   });
+
+  it("neutralizes formula-leading section names before CSV output", () => {
+    const cases: Array<[string, string]> = [
+      // Value with commas+quotes -> guarded then quoted.
+      ['=HYPERLINK("a","b")', "\"'=HYPERLINK(\"\"a\"\",\"\"b\"\")\""],
+      // Value with commas, no quotes -> guarded then quoted.
+      ["+SUM(1,2)", "\"'+SUM(1,2)\""],
+      // Plain leading dash/minus expression -> guarded, unquoted.
+      ["-2+2", "'-2+2"],
+      // At-sign function -> guarded, unquoted.
+      ["@SUM(A1:A2)", "'@SUM(A1:A2)"],
+    ];
+    for (const [name, expectedCell] of cases) {
+      const csv = toBomCsv(
+        [row({ sectionId: "sec-rogue" })],
+        [{ id: "sec-rogue", name, widthMm: 89, heightMm: 38 }],
+        MATERIALS,
+      );
+      const body = csv.trim().split("\n")[1]!;
+      expect(body.startsWith(expectedCell)).toBe(true);
+      // No cell anywhere may begin raw with a formula trigger.
+      expect(csv).not.toMatch(/(^|,|\n)[=+\-@]/);
+    }
+  });
+
+  it("leaves a lone '-' material placeholder unguarded", () => {
+    const csv = toBomCsv([row({ materialId: undefined })], SECTIONS, MATERIALS);
+    expect(csv).toContain(",-,");
+  });
 });

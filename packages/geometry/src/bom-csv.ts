@@ -13,10 +13,17 @@ const HEADER = [
 ];
 
 function csvField(value: string): string {
-  if (/[",\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
+  // Neutralize spreadsheet formula injection: a leading =, +, or @ (or a
+  // leading '-' followed by more characters) can be interpreted as a formula
+  // by Excel/LibreOffice when the CSV is opened. Prefixing with a single quote
+  // marks the cell as literal text. A lone '-' is our literal "no material"
+  // placeholder and is not a formula, so it is left untouched.
+  const isFormulaLeading = /^[=+@]/.test(value) || (/^-/.test(value) && value.length > 1);
+  const guarded = isFormulaLeading ? `'${value}` : value;
+  if (/[\",\n]/.test(guarded)) {
+    return `"${guarded.replace(/"/g, '""')}"`;
   }
-  return value;
+  return guarded;
 }
 
 export function toBomCsv(rows: MemberScheduleRow[], sections: Section[], materials: Material[]): string {
