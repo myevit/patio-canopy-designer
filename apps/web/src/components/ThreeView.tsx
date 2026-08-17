@@ -88,7 +88,15 @@ export function ThreeView({
       }
     : scene;
 
-  const selectableObjects = [...visibleScene.posts, ...visibleScene.members, ...visibleScene.joints];
+  const selectedJoint = scene.joints.find((j) => j.id === selectedObjectId) ?? null;
+  const connectedMemberIds = new Set(selectedJoint?.connectedMemberIds ?? []);
+
+  const selectableObjects = [
+    ...visibleScene.posts,
+    ...visibleScene.members,
+    ...visibleScene.joints,
+    ...(tool === "joint" ? visibleScene.jointCandidates : []),
+  ];
   const accessibleObjects = [...selectableObjects, ...visibleScene.houseAnchors];
   function handlePostClick(event: ThreeEvent<MouseEvent>, postId: string, topAnchorId: string) {
     event.stopPropagation();
@@ -181,7 +189,7 @@ export function ThreeView({
 
       {visibleScene.members.map((member) => {
         const transform = memberTransform(member.start, member.end);
-        const selected = member.id === selectedObjectId;
+        const selected = member.id === selectedObjectId || connectedMemberIds.has(member.id);
         return (
           <mesh
             key={member.id}
@@ -247,7 +255,9 @@ export function ThreeView({
                 onChooseFanAnchor(object.id);
               } else if (tool === "fan" && object.kind === "member") {
                 onChooseFanTargetMember(object.id);
-              } else if (object.kind !== "house-anchor") {
+              } else if (tool === "joint" && object.kind === "joint-candidate") {
+                onSelectCandidate(object.id);
+              } else if (object.kind !== "house-anchor" && object.kind !== "joint-candidate") {
                 onSelect(object.id);
               }
             }}

@@ -3,6 +3,8 @@ import { useId, type ChangeEvent } from "react";
 export interface ProjectMenuProps {
   canUndo: boolean;
   canRedo: boolean;
+  canExport?: boolean;
+  exportBlockedReason?: string;
   onNew: () => void;
   onExport: () => void;
   onImport: (file: File) => void;
@@ -10,7 +12,17 @@ export interface ProjectMenuProps {
   onRedo: () => void;
 }
 
-export function ProjectMenu({ canUndo, canRedo, onNew, onExport, onImport, onUndo, onRedo }: ProjectMenuProps) {
+export function ProjectMenu({
+  canUndo,
+  canRedo,
+  canExport = true,
+  exportBlockedReason,
+  onNew,
+  onExport,
+  onImport,
+  onUndo,
+  onRedo,
+}: ProjectMenuProps) {
   const importInputId = useId();
 
   function handleImportChange(event: ChangeEvent<HTMLInputElement>) {
@@ -26,7 +38,12 @@ export function ProjectMenu({ canUndo, canRedo, onNew, onExport, onImport, onUnd
       <button type="button" onClick={onNew}>
         New
       </button>
-      <button type="button" onClick={onExport}>
+      <button
+        type="button"
+        onClick={onExport}
+        disabled={!canExport}
+        title={!canExport ? exportBlockedReason : undefined}
+      >
         Export
       </button>
       <label htmlFor={importInputId} className="project-menu__import-label">

@@ -138,6 +138,18 @@ describe("PlanView", () => {
     await user.click(screen.getByTestId("house-outline-house-1"));
     expect(onSelect).toHaveBeenCalledWith("house-1");
   });
+
+  it("highlights a joint's connected members in-view when the joint is selected", () => {
+    render(<PlanView scene={scene()} selectedObjectId="joint-1" onSelect={() => {}} />);
+    const member = screen.getByTestId("scene-object-member-1");
+    expect(member).toHaveAttribute("data-connected", "true");
+    expect(member.getAttribute("class")).toContain("plan-view__member--connected");
+  });
+
+  it("does not mark members as connected when no joint is selected", () => {
+    render(<PlanView scene={scene()} selectedObjectId="post-1" onSelect={() => {}} />);
+    expect(screen.getByTestId("scene-object-member-1")).toHaveAttribute("data-connected", "false");
+  });
 });
 
 describe("PlanView house drawing", () => {

@@ -1,4 +1,4 @@
-import { parseProjectDocument, type Anchor, type Member, type ProjectDocument } from "../design-schema.js";
+import { parseProjectDocument, type Anchor, type Joint, type Member, type ProjectDocument } from "../design-schema.js";
 import { selectEaveEdgeIndex } from "../eave-edge.js";
 import {
   deriveFanFieldGeometry,
@@ -7,26 +7,67 @@ import {
 } from "../fan-field-geometry.js";
 import { regenerateJointPosition } from "../joint-candidates.js";
 import { validateOutline } from "../outline-validation.js";
+import type { Vector3Mm } from "../units.js";
 import { formatZodError } from "../zod-error.js";
 import type { CommandResult, DocumentCommand } from "./types.js";
+
+/** How far (mm) a joint's recorded position may drift from its derived crossing before it needs review. */
+const POSITION_DRIFT_TOLERANCE_MM = 5;
+
+const AUTO_FLAGGED_CROSSING_BEHAVIOR = "unresolved";
+const AUTO_FLAGGED_ENGINEERING_STATUS = "input-requires-verification";
+
+function distanceMm(a: Vector3Mm, b: Vector3Mm): number {
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2);
+}
 
 /**
  * Called after any command that can move a member's endpoint (post move/
  * resize, fan-field regeneration) so joints never silently go stale: each
  * joint's position is recomputed from its connected members' current
  * geometry, or the joint is flagged as needing resolution if they no longer
- * meet within tolerance.
+ * meet within tolerance. If a previously auto-flagged joint's members meet
+ * again, it is returned to a resolved state rather than staying unresolved
+ * forever.
  */
 function regenerateOrFlagJoints(draft: ProjectDocument): void {
   draft.joints.forEach((joint) => {
     const regenerated = regenerateJointPosition(draft, joint);
     if (regenerated) {
       joint.positionMm = regenerated;
+      if (
+        joint.crossingBehavior === AUTO_FLAGGED_CROSSING_BEHAVIOR &&
+        joint.engineeringStatus === AUTO_FLAGGED_ENGINEERING_STATUS
+      ) {
+        joint.crossingBehavior = "structural-joint";
+        joint.engineeringStatus = "engineer-review-required";
+      }
     } else {
-      joint.crossingBehavior = "unresolved";
-      joint.engineeringStatus = "input-requires-verification";
+      joint.crossingBehavior = AUTO_FLAGGED_CROSSING_BEHAVIOR;
+      joint.engineeringStatus = AUTO_FLAGGED_ENGINEERING_STATUS;
     }
   });
+}
+
+/**
+ * Revalidates a joint's recorded position against where its connected
+ * members currently meet, after a manual edit to that position. Never
+ * silently accepts a drifted position: it either stays within tolerance, or
+ * the joint is flagged for review. Skipped for single-member joints, whose
+ * "derived crossing" is a degenerate anchor lookup rather than a real
+ * geometric check.
+ */
+function revalidateJointPosition(draft: ProjectDocument, joint: Joint): void {
+  if (joint.connectedMemberIds.length < 2) return;
+  const regenerated = regenerateJointPosition(draft, joint);
+  if (regenerated === null) {
+    joint.crossingBehavior = AUTO_FLAGGED_CROSSING_BEHAVIOR;
+    joint.engineeringStatus = AUTO_FLAGGED_ENGINEERING_STATUS;
+    return;
+  }
+  if (distanceMm(joint.positionMm, regenerated) > POSITION_DRIFT_TOLERANCE_MM) {
+    joint.engineeringStatus = "input-requires-verification";
+  }
 }
 
 function cloneDocument(document: ProjectDocument): ProjectDocument {
@@ -439,8 +480,8 @@ export function applyCommand(document: ProjectDocument, command: DocumentCommand
     }
 
     case "confirm-joint": {
-      if (command.connectedMemberIds.length < 1) {
-        return { ok: false, error: "A joint needs at least one connected member." };
+      if (command.connectedMemberIds.length < 2) {
+        return { ok: false, error: "A joint needs at least two connected members." };
       }
       const unknownMemberId = command.connectedMemberIds.find(
         (id) => !draft.members.some((m) => m.id === id),
@@ -448,13 +489,24 @@ export function applyCommand(document: ProjectDocument, command: DocumentCommand
       if (unknownMemberId) {
         return { ok: false, error: `Unknown member id: ${unknownMemberId}` };
       }
-      draft.joints.push({
+      const regenerated = regenerateJointPosition(draft, { connectedMemberIds: command.connectedMemberIds });
+      if (regenerated === null) {
+        return {
+          ok: false,
+          error: `Members ${command.connectedMemberIds.map((id) => `"${id}"`).join(" and ")} do not meet; cannot create a joint.`,
+        };
+      }
+      const joint: Joint = {
         id: command.jointId,
         connectedMemberIds: command.connectedMemberIds,
         positionMm: command.positionMm,
         crossingBehavior: command.crossingBehavior,
         engineeringStatus: command.engineeringStatus,
-      });
+      };
+      if (distanceMm(command.positionMm, regenerated) > POSITION_DRIFT_TOLERANCE_MM) {
+        joint.engineeringStatus = "input-requires-verification";
+      }
+      draft.joints.push(joint);
       return finalize(draft);
     }
 
@@ -464,6 +516,9 @@ export function applyCommand(document: ProjectDocument, command: DocumentCommand
         return { ok: false, error: `Unknown joint id: ${command.jointId}` };
       }
       Object.assign(joint, command.patch);
+      if (command.patch.positionMm !== undefined) {
+        revalidateJointPosition(draft, joint);
+      }
       return finalize(draft);
     }
 

@@ -140,7 +140,8 @@ body {
 
 .plan-view__post--selected,
 .plan-view__member--selected,
-.plan-view__joint--selected {
+.plan-view__joint--selected,
+.plan-view__member--connected {
   stroke: #f2a600;
   fill: #f2a600;
 }
@@ -150,11 +151,37 @@ body {
   height: 100%;
 }
 
-.inspector {
+.studio-shell__sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   border-left: 1px solid #cbd3d9;
+  background: #fff;
+}
+
+.topology-diagnostics {
+  padding: 1rem;
+  border-bottom: 1px solid #cbd3d9;
+  overflow-y: auto;
+  max-height: 40%;
+}
+
+.topology-diagnostics h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.topology-diagnostics ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+.inspector {
   padding: 1rem;
   overflow-y: auto;
   background: #fff;
+  flex: 1;
 }
 
 .inspector dl {

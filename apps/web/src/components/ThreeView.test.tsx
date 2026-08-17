@@ -136,6 +136,18 @@ describe("ThreeView", () => {
     render(<ThreeView scene={scene()} selectedObjectId={null} onSelect={() => {}} />);
     expect(screen.getByTestId("scene-object-anchor-house-1")).toBeInTheDocument();
   });
+
+  it("highlights a joint's connected members in-view when the joint is selected", () => {
+    render(<ThreeView scene={scene()} selectedObjectId="joint-1" onSelect={() => {}} />);
+    const connectedMaterial = screen.getByTestId("scene-object-member-1").querySelector("meshstandardmaterial");
+    expect(connectedMaterial).toHaveAttribute("color", "#f2a600");
+  });
+
+  it("does not highlight members when no joint is selected", () => {
+    render(<ThreeView scene={scene()} selectedObjectId="post-1" onSelect={() => {}} />);
+    const ordinaryMaterial = screen.getByTestId("scene-object-member-1").querySelector("meshstandardmaterial");
+    expect(ordinaryMaterial).toHaveAttribute("color", "#5b7c99");
+  });
 });
 
 describe("ThreeView beam flow", () => {
@@ -326,6 +338,42 @@ describe("ThreeView joint candidates", () => {
       />,
     );
     await user.click(screen.getByTestId("scene-object-candidate::crossing::member-1::member-2"));
+    expect(onSelectCandidate).toHaveBeenCalledWith("candidate::crossing::member-1::member-2");
+  });
+
+  it("includes joint candidates in the accessible fallback list while the Joint tool is active", () => {
+    render(
+      <ThreeView scene={sceneWithCandidate()} selectedObjectId={null} onSelect={() => {}} tool="joint" />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Select candidate::crossing::member-1::member-2 in 3D scene" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not include joint candidates in the accessible fallback list outside the Joint tool", () => {
+    render(
+      <ThreeView scene={sceneWithCandidate()} selectedObjectId={null} onSelect={() => {}} tool="select" />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Select candidate::crossing::member-1::member-2 in 3D scene" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keyboard/AT users can select and confirm a candidate via the accessible fallback list", async () => {
+    const user = userEvent.setup();
+    const onSelectCandidate = vi.fn();
+    render(
+      <ThreeView
+        scene={sceneWithCandidate()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="joint"
+        onSelectCandidate={onSelectCandidate}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Select candidate::crossing::member-1::member-2 in 3D scene" }),
+    );
     expect(onSelectCandidate).toHaveBeenCalledWith("candidate::crossing::member-1::member-2");
   });
 });

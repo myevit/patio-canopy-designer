@@ -485,6 +485,16 @@ describe("App: intersections and joints", () => {
 
     await user.click(screen.getByRole("button", { name: /inspect in 3d/i }));
     expect(screen.getByRole("button", { name: "3D" })).toHaveAttribute("aria-pressed", "true");
+
+    const exitFocusButton = screen.getByRole("button", { name: /exit focus/i });
+    await user.click(exitFocusButton);
+    expect(screen.queryByRole("button", { name: /exit focus/i })).not.toBeInTheDocument();
+  });
+
+  it("does not show an Exit focus button while no joint is in 3D focus mode", async () => {
+    mockRect();
+    renderApp();
+    expect(screen.queryByRole("button", { name: /exit focus/i })).not.toBeInTheDocument();
   });
 
   it("regenerates a confirmed joint's position when a connected post moves, within tolerance", async () => {
@@ -658,17 +668,35 @@ describe("App: undo/redo and project menu", () => {
     expect(screen.getByRole("button", { name: /undo/i })).toBeDisabled();
   });
 
-  it("Export triggers a JSON download of the current project", async () => {
+  it("Export triggers a JSON download of the current project once topology is clean", async () => {
     const user = userEvent.setup();
     URL.createObjectURL = vi.fn(() => "blob:mock");
     URL.revokeObjectURL = vi.fn();
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 
-    renderApp();
+    const { createEmptyProjectDocument } = await import("@canopy/shared");
+    const clean = createEmptyProjectDocument({ name: "Clean project", createdAt: "2026-08-16T00:00:00.000Z" });
+    render(<App persistenceAdapter={createFakeAdapter(clean)} />);
+    await screen.findByText(/no topology issues/i);
     await user.click(screen.getByRole("button", { name: "Export" }));
 
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(clickSpy).toHaveBeenCalledOnce();
+    clickSpy.mockRestore();
+  });
+
+  it("blocks Export while topology issues are present, surfacing them in a discoverable diagnostics panel", async () => {
+    const user = userEvent.setup();
+    URL.createObjectURL = vi.fn(() => "blob:mock");
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    renderApp();
+    expect(await screen.findByRole("region", { name: "Topology diagnostics" })).toBeInTheDocument();
+    const exportButton = screen.getByRole("button", { name: "Export" });
+    expect(exportButton).toBeDisabled();
+
+    await user.click(exportButton);
+    expect(clickSpy).not.toHaveBeenCalled();
     clickSpy.mockRestore();
   });
 

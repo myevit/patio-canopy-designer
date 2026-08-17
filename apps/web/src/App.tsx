@@ -7,6 +7,7 @@ import {
   createEmptyProjectDocument,
   deriveFanFieldGeometry,
   exportProjectDocument,
+  findTopologyIssues,
   importProjectDocument,
   type CrossingBehavior,
   type DocumentCommand,
@@ -30,6 +31,7 @@ import { PlanView } from "./components/PlanView.js";
 import { ProjectMenu } from "./components/ProjectMenu.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { ThreeView } from "./components/ThreeView.js";
+import { TopologyDiagnosticsPanel } from "./components/TopologyDiagnosticsPanel.js";
 import { Toolbar } from "./components/Toolbar.js";
 import { ViewModeSwitcher } from "./components/ViewModeSwitcher.js";
 import { createDexiePersistenceAdapter } from "./persistence/dexie-persistence-adapter.js";
@@ -77,6 +79,10 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
   const persistence = useProjectPersistence(documentController, persistenceAdapter);
 
   const scene = useMemo(() => buildScene(documentController.document), [documentController.document]);
+  const topologyIssues = useMemo(
+    () => findTopologyIssues(documentController.document),
+    [documentController.document],
+  );
 
   function dispatchGatedCommand(command: DocumentCommand): { ok: true } | { ok: false; error: string } {
     if (!persistence.loaded) {
@@ -543,6 +549,13 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
   }
 
   function handleExport() {
+    if (topologyIssues.length > 0) {
+      dispatch({
+        type: "set-interaction",
+        interaction: { status: "invalid", reason: "Resolve topology issues before exporting." },
+      });
+      return;
+    }
     const json = exportProjectDocument(documentController.document);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -576,6 +589,8 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
         <ProjectMenu
           canUndo={documentController.canUndo}
           canRedo={documentController.canRedo}
+          canExport={topologyIssues.length === 0}
+          exportBlockedReason="Resolve topology issues before exporting."
           onNew={handleNewProject}
           onExport={handleExport}
           onImport={handleImport}
@@ -586,6 +601,11 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
           viewMode={state.viewMode}
           onSelectViewMode={(viewMode) => dispatch({ type: "set-view-mode", viewMode })}
         />
+        {state.focusedJointId && (
+          <button type="button" onClick={() => dispatch({ type: "clear-joint-focus" })}>
+            Exit focus
+          </button>
+        )}
       </header>
 
       <div className="studio-shell__body">
@@ -628,46 +648,49 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
             />
           )}
         </main>
-        <Inspector
-          selected={selected}
-          selectedVertex={state.selectedVertex}
-          vertexOutline={vertexOutline}
-          roofPlane={roofPlaneForSelected}
-          gutter={gutterForSelectedRoofPlane}
-          drawingPoints={drawingPoints}
-          sections={documentController.document.sections}
-          tool={state.tool}
-          onMoveVertex={handleMoveVertex}
-          onDeleteVertex={handleDeleteVertex}
-          onAddRoofPlane={handleAddRoofPlane}
-          onUpdateRoofPlane={handleUpdateRoofPlane}
-          onUpdateGutter={handleUpdateGutter}
-          onAddDrawingPoint={(point) => dispatch({ type: "add-outline-point", point })}
-          onRemoveLastDrawingPoint={() => dispatch({ type: "remove-last-outline-point" })}
-          onCloseDrawing={closeDrawing}
-          onPlacePost={handlePlacePost}
-          onMovePost={handleMovePost}
-          onUpdatePost={handleUpdatePost}
-          onDuplicatePost={handleDuplicatePost}
-          onDeletePost={handleDeletePost}
-          onUpdateBeam={handleUpdateBeam}
-          onDeleteBeam={handleDeleteBeam}
-          fanDraft={fanDraft}
-          onUpdateFanDraft={handleUpdateFanDraft}
-          onCommitFanField={handleCommitFanField}
-          onCancelFanPreview={handleCancelFanPreview}
-          fanFieldForSelected={fanFieldForSelected}
-          onUpdateFanField={handleUpdateFanField}
-          onDeleteFanField={handleDeleteFanField}
-          onDeleteJoint={handleDeleteJoint}
-          unresolvedCandidates={scene.jointCandidates}
-          selectedCandidate={selectedCandidate}
-          onSelectCandidate={handleSelectCandidate}
-          onCancelCandidateSelection={handleCancelCandidateSelection}
-          onConfirmCandidate={handleConfirmCandidate}
-          onUpdateJoint={handleUpdateJoint}
-          onFocusJoint={handleFocusJoint}
-        />
+        <div className="studio-shell__sidebar">
+          <TopologyDiagnosticsPanel issues={topologyIssues} />
+          <Inspector
+            selected={selected}
+            selectedVertex={state.selectedVertex}
+            vertexOutline={vertexOutline}
+            roofPlane={roofPlaneForSelected}
+            gutter={gutterForSelectedRoofPlane}
+            drawingPoints={drawingPoints}
+            sections={documentController.document.sections}
+            tool={state.tool}
+            onMoveVertex={handleMoveVertex}
+            onDeleteVertex={handleDeleteVertex}
+            onAddRoofPlane={handleAddRoofPlane}
+            onUpdateRoofPlane={handleUpdateRoofPlane}
+            onUpdateGutter={handleUpdateGutter}
+            onAddDrawingPoint={(point) => dispatch({ type: "add-outline-point", point })}
+            onRemoveLastDrawingPoint={() => dispatch({ type: "remove-last-outline-point" })}
+            onCloseDrawing={closeDrawing}
+            onPlacePost={handlePlacePost}
+            onMovePost={handleMovePost}
+            onUpdatePost={handleUpdatePost}
+            onDuplicatePost={handleDuplicatePost}
+            onDeletePost={handleDeletePost}
+            onUpdateBeam={handleUpdateBeam}
+            onDeleteBeam={handleDeleteBeam}
+            fanDraft={fanDraft}
+            onUpdateFanDraft={handleUpdateFanDraft}
+            onCommitFanField={handleCommitFanField}
+            onCancelFanPreview={handleCancelFanPreview}
+            fanFieldForSelected={fanFieldForSelected}
+            onUpdateFanField={handleUpdateFanField}
+            onDeleteFanField={handleDeleteFanField}
+            onDeleteJoint={handleDeleteJoint}
+            unresolvedCandidates={scene.jointCandidates}
+            selectedCandidate={selectedCandidate}
+            onSelectCandidate={handleSelectCandidate}
+            onCancelCandidateSelection={handleCancelCandidateSelection}
+            onConfirmCandidate={handleConfirmCandidate}
+            onUpdateJoint={handleUpdateJoint}
+            onFocusJoint={handleFocusJoint}
+          />
+        </div>
       </div>
 
       <StatusBar tool={state.tool} interaction={state.interaction} persistenceError={persistence.error} />

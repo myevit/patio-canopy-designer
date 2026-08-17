@@ -862,6 +862,67 @@ describe("applyCommand: confirm-joint", () => {
     });
     expect(result.ok).toBe(false);
   });
+
+  it("rejects a joint with only one connected member", () => {
+    const doc = withCrossingBeams();
+    const result = applyCommand(doc, {
+      type: "confirm-joint",
+      jointId: "joint-1",
+      connectedMemberIds: ["m-1"],
+      positionMm: { x: 500, y: 500, z: 0 },
+      crossingBehavior: "structural-joint",
+      engineeringStatus: "engineer-review-required",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/at least two/i);
+    }
+  });
+
+  it("rejects a candidate whose members don't actually meet, instead of creating a disconnected joint", () => {
+    const doc = withCrossingBeams();
+    doc.anchors.push(
+      { id: "a-5", kind: "free", positionMm: { x: 9000, y: 9000, z: 0 } },
+      { id: "a-6", kind: "free", positionMm: { x: 9000, y: 9500, z: 0 } },
+    );
+    doc.members.push({
+      id: "m-3",
+      role: "perimeter-beam",
+      startAnchorId: "a-5",
+      endAnchorId: "a-6",
+      sectionId: "sec-beam",
+      rollRad: 0,
+    });
+    const result = applyCommand(doc, {
+      type: "confirm-joint",
+      jointId: "joint-1",
+      connectedMemberIds: ["m-1", "m-3"],
+      positionMm: { x: 500, y: 500, z: 0 },
+      crossingBehavior: "structural-joint",
+      engineeringStatus: "engineer-review-required",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/do not meet/i);
+    }
+  });
+
+  it("flags a newly confirmed joint as needing verification when its recorded position doesn't match the derived crossing", () => {
+    const doc = withCrossingBeams();
+    const result = applyCommand(doc, {
+      type: "confirm-joint",
+      jointId: "joint-1",
+      connectedMemberIds: ["m-1", "m-2"],
+      positionMm: { x: 999, y: 999, z: 0 },
+      crossingBehavior: "structural-joint",
+      engineeringStatus: "engineer-review-required",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.joints[0]!.positionMm).toEqual({ x: 999, y: 999, z: 0 });
+      expect(result.document.joints[0]!.engineeringStatus).toBe("input-requires-verification");
+    }
+  });
 });
 
 describe("applyCommand: update-joint", () => {
@@ -934,6 +995,71 @@ describe("applyCommand: update-joint", () => {
     const doc = withJoint();
     const result = applyCommand(doc, { type: "update-joint", jointId: "missing", patch: { crossingBehavior: "half-lap" } });
     expect(result.ok).toBe(false);
+  });
+
+  function withCrossingJoint(): ProjectDocument {
+    const doc = baseDoc();
+    doc.sections.push({ id: "sec-beam", name: "Beam", widthMm: 89, heightMm: 38 });
+    doc.anchors.push(
+      { id: "a-1", kind: "free", positionMm: { x: 0, y: 500, z: 0 } },
+      { id: "a-2", kind: "free", positionMm: { x: 1000, y: 500, z: 0 } },
+      { id: "a-3", kind: "free", positionMm: { x: 500, y: 0, z: 0 } },
+      { id: "a-4", kind: "free", positionMm: { x: 500, y: 1000, z: 0 } },
+    );
+    doc.members.push(
+      { id: "m-1", role: "perimeter-beam", startAnchorId: "a-1", endAnchorId: "a-2", sectionId: "sec-beam", rollRad: 0 },
+      { id: "m-2", role: "perimeter-beam", startAnchorId: "a-3", endAnchorId: "a-4", sectionId: "sec-beam", rollRad: 0 },
+    );
+    doc.joints.push({
+      id: "joint-1",
+      connectedMemberIds: ["m-1", "m-2"],
+      positionMm: { x: 500, y: 500, z: 0 },
+      crossingBehavior: "structural-joint",
+      engineeringStatus: "engineer-review-required",
+    });
+    return doc;
+  }
+
+  it("flags a joint's engineering status when its position is nudged away from the derived crossing", () => {
+    const doc = withCrossingJoint();
+    const result = applyCommand(doc, {
+      type: "update-joint",
+      jointId: "joint-1",
+      patch: { positionMm: { x: 8000, y: 8000, z: 0 } },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const joint = result.document.joints[0]!;
+      expect(joint.positionMm).toEqual({ x: 8000, y: 8000, z: 0 });
+      expect(joint.engineeringStatus).toBe("input-requires-verification");
+    }
+  });
+
+  it("keeps a joint's engineering status untouched when the new position stays within tolerance of the derived crossing", () => {
+    const doc = withCrossingJoint();
+    const result = applyCommand(doc, {
+      type: "update-joint",
+      jointId: "joint-1",
+      patch: { positionMm: { x: 501, y: 499, z: 0 } },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.joints[0]!.engineeringStatus).toBe("engineer-review-required");
+    }
+  });
+
+  it("does not revalidate position when the patch leaves positionMm untouched", () => {
+    const doc = withJoint();
+    const result = applyCommand(doc, {
+      type: "update-joint",
+      jointId: "joint-1",
+      patch: { engineeringStatus: "engineer-review-required" },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.joints[0]!.engineeringStatus).toBe("engineer-review-required");
+      expect(result.document.joints[0]!.positionMm).toEqual({ x: 500, y: 0, z: 0 });
+    }
   });
 });
 
@@ -1050,6 +1176,55 @@ describe("applyCommand: joint regeneration on move", () => {
       const joint = result.document.joints.find((j) => j.id === "joint-1")!;
       expect(joint.crossingBehavior).toBe("unresolved");
       expect(joint.engineeringStatus).toBe("input-requires-verification");
+    }
+  });
+
+  it("resets an auto-flagged joint back to a resolved state once geometry reconverges", () => {
+    const doc = baseDoc();
+    doc.sections.push({ id: "sec-post", name: "Post", widthMm: 140, heightMm: 140 });
+    doc.sections.push({ id: "sec-beam", name: "Beam", widthMm: 89, heightMm: 38 });
+    doc.anchors.push(
+      { id: "anchor-base-a", kind: "post-base", positionMm: { x: 0, y: 500, z: 0 } },
+      { id: "anchor-top-a", kind: "post-top", positionMm: { x: 0, y: 500, z: 2400 } },
+      { id: "anchor-base-b", kind: "post-base", positionMm: { x: 1000, y: 500, z: 0 } },
+      { id: "anchor-top-b", kind: "post-top", positionMm: { x: 1000, y: 500, z: 2400 } },
+      { id: "anchor-cross-1", kind: "free", positionMm: { x: 500, y: 0, z: 2400 } },
+      { id: "anchor-cross-2", kind: "free", positionMm: { x: 500, y: 1000, z: 2400 } },
+    );
+    doc.posts.push(
+      { id: "post-a", baseAnchorId: "anchor-base-a", topAnchorId: "anchor-top-a", sectionId: "sec-post", heightMm: 2400 },
+      { id: "post-b", baseAnchorId: "anchor-base-b", topAnchorId: "anchor-top-b", sectionId: "sec-post", heightMm: 2400 },
+    );
+    doc.members.push(
+      { id: "beam-1", role: "perimeter-beam", startAnchorId: "anchor-top-a", endAnchorId: "anchor-top-b", sectionId: "sec-beam", rollRad: 0 },
+      { id: "beam-2", role: "perimeter-beam", startAnchorId: "anchor-cross-1", endAnchorId: "anchor-cross-2", sectionId: "sec-beam", rollRad: 0 },
+    );
+    doc.joints.push({
+      id: "joint-1",
+      connectedMemberIds: ["beam-1", "beam-2"],
+      positionMm: { x: 500, y: 500, z: 2400 },
+      crossingBehavior: "structural-joint",
+      engineeringStatus: "engineer-review-required",
+    });
+
+    const broken = applyCommand(doc, { type: "move-post", postId: "post-a", position: { x: 0, y: 8000, z: 0 } });
+    expect(broken.ok).toBe(true);
+    if (!broken.ok) return;
+    const brokenJoint = broken.document.joints.find((j) => j.id === "joint-1")!;
+    expect(brokenJoint.crossingBehavior).toBe("unresolved");
+    expect(brokenJoint.engineeringStatus).toBe("input-requires-verification");
+
+    const reconverged = applyCommand(broken.document, {
+      type: "move-post",
+      postId: "post-a",
+      position: { x: 0, y: 500, z: 0 },
+    });
+    expect(reconverged.ok).toBe(true);
+    if (reconverged.ok) {
+      const joint = reconverged.document.joints.find((j) => j.id === "joint-1")!;
+      expect(joint.crossingBehavior).toBe("structural-joint");
+      expect(joint.engineeringStatus).toBe("engineer-review-required");
+      expect(joint.positionMm).toEqual({ x: 500, y: 500, z: 2400 });
     }
   });
 });

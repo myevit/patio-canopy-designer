@@ -76,6 +76,8 @@ export function PlanView({
   fanPreview = null,
   onSelectCandidate = () => {},
 }: PlanViewProps) {
+  const selectedJoint = scene.joints.find((joint) => joint.id === selectedObjectId) ?? null;
+  const connectedMemberIds = new Set(selectedJoint?.connectedMemberIds ?? []);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [dragPreview, setDragPreview] = useState<{ vertex: SelectedVertex; position: Vector3Mm } | null>(null);
   const [postDragPreview, setPostDragPreview] = useState<{ postId: string; position: Vector3Mm } | null>(null);
@@ -375,8 +377,13 @@ export function PlanView({
           key={member.id}
           data-testid={`scene-object-${member.id}`}
           data-selected={member.id === selectedObjectId}
+          data-connected={connectedMemberIds.has(member.id)}
           className={
-            member.id === selectedObjectId ? "plan-view__member plan-view__member--selected" : "plan-view__member"
+            member.id === selectedObjectId
+              ? "plan-view__member plan-view__member--selected"
+              : connectedMemberIds.has(member.id)
+                ? "plan-view__member plan-view__member--connected"
+                : "plan-view__member"
           }
           x1={member.start.x}
           y1={member.start.y}
