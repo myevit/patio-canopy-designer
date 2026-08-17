@@ -39,9 +39,10 @@ body {
 
 .studio-shell__top-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.5rem 1rem;
   padding: 0.5rem 1rem;
   background: #1c232b;
   color: #fff;
@@ -50,6 +51,7 @@ body {
 .toolbar,
 .view-mode-switcher {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.4rem;
 }
 
@@ -69,6 +71,64 @@ body {
   background: #3b7ddd;
   border-color: #3b7ddd;
   color: #fff;
+}
+
+.project-menu {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.project-menu button,
+.project-menu__import-label {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid #3a4552;
+  border-radius: 6px;
+  background: #2a323c;
+  color: #e6e9ec;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+
+.project-menu button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.project-menu__import-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+.project-menu__import-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.project-menu__units-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #e6e9ec;
+  font-size: 0.9rem;
+}
+
+.project-menu__units-label select {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #3a4552;
+  border-radius: 6px;
+  background: #2a323c;
+  color: #e6e9ec;
+  font-size: 0.9rem;
 }
 
 .studio-shell__body {
@@ -196,15 +256,87 @@ body {
   flex: 1;
 }
 
+.inspector h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  color: #1c232b;
+}
+
+.inspector h3 {
+  margin: 0 0 0.6rem;
+  font-size: 0.9rem;
+  color: #1c232b;
+}
+
 .inspector dl {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 0.25rem 0.75rem;
+  margin: 0 0 0.75rem;
 }
 
 .inspector dt {
   font-weight: 600;
   color: #566370;
+}
+
+.inspector button {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid #cbd3d9;
+  border-radius: 6px;
+  background: #fff;
+  color: #1c232b;
+  cursor: pointer;
+  font-size: 0.85rem;
+  margin: 0 0.4rem 0.4rem 0;
+}
+
+.inspector button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inspector__field {
+  margin: 0 0 0.6rem;
+}
+
+.inspector__field label {
+  display: block;
+  font-weight: 600;
+  color: #566370;
+  font-size: 0.8rem;
+  margin-bottom: 0.2rem;
+}
+
+.inspector__field input[type="number"],
+.inspector__field input[type="text"],
+.inspector__field select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #cbd3d9;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.inspector__field input[aria-invalid="true"] {
+  border-color: #c33f3f;
+  background: #fdecec;
+}
+
+.inspector__field [role="alert"] {
+  display: block;
+  color: #c33f3f;
+  font-size: 0.78rem;
+  margin-top: 0.2rem;
+}
+
+.inspector__drawing-panel {
+  border: 1px solid #cbd3d9;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  background: #f7f8fa;
 }
 
 .status-bar {

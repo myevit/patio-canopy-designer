@@ -26,7 +26,7 @@ describe("Inspector", () => {
     render(<Inspector selected={post} />);
     expect(screen.getByText("post-1")).toBeInTheDocument();
     expect(screen.getByText("Post")).toBeInTheDocument();
-    expect(screen.getByText(/140/)).toBeInTheDocument();
+    expect(screen.getByText("6x6")).toBeInTheDocument();
     expect(screen.getByText(/2400/)).toBeInTheDocument();
   });
 
@@ -95,6 +95,17 @@ describe("Inspector post editing", () => {
     { id: "sec-post-2", name: "90x90 post", widthMm: 90, heightMm: 90 },
   ];
 
+  it("shows the post's cross-section as a North American nominal lumber size", () => {
+    render(<Inspector selected={post} sections={sections} />);
+    expect(screen.getByText("6x6")).toBeInTheDocument();
+  });
+
+  it("falls back to raw millimetre dimensions when no standard nominal size matches", () => {
+    const oddPost: SceneObject = { ...post, widthMm: 500, depthMm: 500 };
+    render(<Inspector selected={oddPost} sections={sections} />);
+    expect(screen.getByText(/500 mm x 500 mm/)).toBeInTheDocument();
+  });
+
   it("shows editable base position, height, and section for a selected post", () => {
     render(<Inspector selected={post} sections={sections} />);
     expect(screen.getByLabelText(/base x/i)).toHaveValue(100);
@@ -140,6 +151,42 @@ describe("Inspector post editing", () => {
     render(<Inspector selected={post} sections={sections} onDeletePost={onDeletePost} />);
     fireEvent.click(screen.getByRole("button", { name: /delete post/i }));
     expect(onDeletePost).toHaveBeenCalledWith("post-1");
+  });
+});
+
+describe("Inspector post editing, ft-in display units", () => {
+  const post: SceneObject = {
+    id: "post-1",
+    kind: "post",
+    base: { x: 3048, y: 2438.4, z: 0 },
+    top: { x: 3048, y: 2438.4, z: 2743.2 },
+    baseAnchorId: "anchor-base",
+    topAnchorId: "anchor-top",
+    sectionId: "sec-post",
+    widthMm: 140,
+    depthMm: 140,
+  };
+  const sections = [{ id: "sec-post", name: "140x140 post", widthMm: 140, heightMm: 140 }];
+
+  it("shows base position and height in feet-inches", () => {
+    render(<Inspector selected={post} sections={sections} displayUnits="ft-in" />);
+    expect(screen.getByLabelText(/base x/i)).toHaveValue(`10'-0"`);
+    expect(screen.getByLabelText(/base y/i)).toHaveValue(`8'-0"`);
+    expect(screen.getByLabelText(/height/i)).toHaveValue(`9'-0"`);
+  });
+
+  it("shows the post top position in feet-inches", () => {
+    render(<Inspector selected={post} sections={sections} displayUnits="ft-in" />);
+    expect(screen.getByText(/10'-0".*8'-0".*9'-0"/)).toBeInTheDocument();
+  });
+
+  it("commits a feet-inches height edit back to millimetres", () => {
+    const onUpdatePost = vi.fn();
+    render(<Inspector selected={post} sections={sections} onUpdatePost={onUpdatePost} displayUnits="ft-in" />);
+    const heightField = screen.getByLabelText(/height/i);
+    fireEvent.change(heightField, { target: { value: `10'-0"` } });
+    fireEvent.blur(heightField);
+    expect(onUpdatePost).toHaveBeenCalledWith("post-1", { heightMm: expect.closeTo(3048, 6) });
   });
 });
 
@@ -258,6 +305,41 @@ describe("Inspector fan preview", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
     expect(onCancelFanPreview).toHaveBeenCalled();
+  });
+
+  it("shows spacing and sag in feet-inches", () => {
+    const draft = {
+      ...createFanDraft("anchor-1", { kind: "member", memberId: "member-1" }, "sec-rafter"),
+      distributionMode: "spacing" as const,
+      spacingMm: 609.6,
+      elevationMode: "parabolic" as const,
+      sagMm: 152.4,
+    };
+    render(<Inspector selected={undefined} sections={sections} fanDraft={draft} displayUnits="ft-in" />);
+    expect(screen.getByLabelText(/spacing/i)).toHaveValue(`2'-0"`);
+    expect(screen.getByLabelText(/sag/i)).toHaveValue(`0'-6"`);
+  });
+
+  it("commits a feet-inches spacing edit back to millimetres", () => {
+    const draft = {
+      ...createFanDraft("anchor-1", { kind: "member", memberId: "member-1" }, "sec-rafter"),
+      distributionMode: "spacing" as const,
+      spacingMm: 609.6,
+    };
+    const onUpdateFanDraft = vi.fn();
+    render(
+      <Inspector
+        selected={undefined}
+        sections={sections}
+        fanDraft={draft}
+        onUpdateFanDraft={onUpdateFanDraft}
+        displayUnits="ft-in"
+      />,
+    );
+    const spacingField = screen.getByLabelText(/spacing/i);
+    fireEvent.change(spacingField, { target: { value: `3'-0"` } });
+    fireEvent.blur(spacingField);
+    expect(onUpdateFanDraft).toHaveBeenCalledWith({ spacingMm: expect.closeTo(914.4, 6) });
   });
 });
 
@@ -512,6 +594,51 @@ describe("Inspector vertex editing", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /delete vertex/i }));
     expect(onDeleteVertex).toHaveBeenCalledWith({ outlineId: "house-1", index: 1 });
+  });
+});
+
+describe("Inspector vertex editing, ft-in display units", () => {
+  const outline: SceneObject = {
+    id: "house-1",
+    kind: "house-outline",
+    points: [
+      { x: 3048, y: 2438.4, z: 0 },
+      { x: 400, y: 200, z: 0 },
+      { x: 400, y: 500, z: 0 },
+    ],
+  };
+
+  it("shows the vertex position in feet-inches", () => {
+    render(
+      <Inspector
+        selected={undefined}
+        selectedVertex={{ outlineId: "house-1", index: 0 }}
+        vertexOutline={outline}
+        displayUnits="ft-in"
+      />,
+    );
+    expect(screen.getByLabelText(/vertex x/i)).toHaveValue(`10'-0"`);
+    expect(screen.getByLabelText(/vertex y/i)).toHaveValue(`8'-0"`);
+  });
+
+  it("commits a feet-inches vertex edit back to millimetres", () => {
+    const onMoveVertex = vi.fn();
+    render(
+      <Inspector
+        selected={undefined}
+        selectedVertex={{ outlineId: "house-1", index: 0 }}
+        vertexOutline={outline}
+        onMoveVertex={onMoveVertex}
+        displayUnits="ft-in"
+      />,
+    );
+    const xField = screen.getByLabelText(/vertex x/i);
+    fireEvent.change(xField, { target: { value: `9'-0"` } });
+    fireEvent.blur(xField);
+    expect(onMoveVertex).toHaveBeenCalledWith(
+      { outlineId: "house-1", index: 0 },
+      { x: expect.closeTo(2743.2, 6), y: 2438.4, z: 0 },
+    );
   });
 });
 
@@ -1044,5 +1171,34 @@ describe("Inspector confirmed joint editing", () => {
     render(<Inspector selected={joint} onFocusJoint={onFocusJoint} />);
     fireEvent.click(screen.getByRole("button", { name: /inspect in 3d/i }));
     expect(onFocusJoint).toHaveBeenCalledWith("joint-1");
+  });
+});
+
+describe("Inspector confirmed joint editing, ft-in display units", () => {
+  const joint: SceneObject = {
+    id: "joint-1",
+    kind: "joint",
+    position: { x: 3048, y: 3048, z: 0 },
+    connectedMemberIds: ["member-1", "member-2"],
+    crossingBehavior: "structural-joint",
+    engineeringStatus: "engineer-review-required",
+  };
+
+  it("shows the joint position in feet-inches", () => {
+    render(<Inspector selected={joint} displayUnits="ft-in" />);
+    expect(screen.getByLabelText(/position x/i)).toHaveValue(`10'-0"`);
+    expect(screen.getByLabelText(/position y/i)).toHaveValue(`10'-0"`);
+    expect(screen.getByLabelText(/position z/i)).toHaveValue(`0'-0"`);
+  });
+
+  it("commits a feet-inches position edit back to millimetres", () => {
+    const onUpdateJoint = vi.fn().mockReturnValue({ ok: true });
+    render(<Inspector selected={joint} onUpdateJoint={onUpdateJoint} displayUnits="ft-in" />);
+    const xField = screen.getByLabelText(/position x/i);
+    fireEvent.change(xField, { target: { value: `9'-0"` } });
+    fireEvent.blur(xField);
+    expect(onUpdateJoint).toHaveBeenCalledWith("joint-1", {
+      positionMm: { x: expect.closeTo(2743.2, 6), y: 3048, z: 0 },
+    });
   });
 });

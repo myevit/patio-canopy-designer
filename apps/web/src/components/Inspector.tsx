@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { SceneGutter, SceneJointCandidate, SceneObject, SceneRoofPlane } from "@canopy/geometry";
 import {
   formatLengthMm,
+  formatNominalLumberSize,
   formatPitch,
   parseLengthMm,
   parsePitch,
@@ -54,7 +55,10 @@ const MEMBER_ROLE_LABELS: Record<string, string> = {
   "fan-rafter": "Fan rafter",
 };
 
-function formatPoint(point: Vector3Mm): string {
+function formatPoint(point: Vector3Mm, unit: DisplayLengthUnit = "mm"): string {
+  if (unit === "ft-in") {
+    return `x ${formatLengthMm(point.x, unit)}, y ${formatLengthMm(point.y, unit)}, z ${formatLengthMm(point.z, unit)}`;
+  }
   return `x ${point.x} mm, y ${point.y} mm, z ${point.z} mm`;
 }
 
@@ -388,6 +392,7 @@ interface FanDistributionFieldsProps {
   distributionMode: "count" | "spacing";
   count: number;
   spacingMm: number;
+  unit: DisplayLengthUnit;
   onChangeMode: (mode: "count" | "spacing") => void;
   onChangeCount: (count: number) => void;
   onChangeSpacing: (spacingMm: number) => void;
@@ -397,6 +402,7 @@ function FanDistributionFields({
   distributionMode,
   count,
   spacingMm,
+  unit,
   onChangeMode,
   onChangeCount,
   onChangeSpacing,
@@ -417,6 +423,8 @@ function FanDistributionFields({
       </p>
       {distributionMode === "count" ? (
         <NumberField label="Count" value={count} onCommit={(value) => onChangeCount(Math.round(value))} />
+      ) : unit === "ft-in" ? (
+        <LengthField label="Spacing (ft-in)" valueMm={spacingMm} unit={unit} onCommit={onChangeSpacing} />
       ) : (
         <NumberField label="Spacing (mm)" value={spacingMm} onCommit={onChangeSpacing} />
       )}
@@ -427,11 +435,12 @@ function FanDistributionFields({
 interface FanElevationFieldsProps {
   elevationMode: "linear" | "parabolic";
   sagMm: number;
+  unit: DisplayLengthUnit;
   onChangeMode: (mode: "linear" | "parabolic") => void;
   onChangeSag: (sagMm: number) => void;
 }
 
-function FanElevationFields({ elevationMode, sagMm, onChangeMode, onChangeSag }: FanElevationFieldsProps) {
+function FanElevationFields({ elevationMode, sagMm, unit, onChangeMode, onChangeSag }: FanElevationFieldsProps) {
   const modeId = useId();
   return (
     <>
@@ -446,7 +455,12 @@ function FanElevationFields({ elevationMode, sagMm, onChangeMode, onChangeSag }:
           <option value="parabolic">Parabolic sag (saddle)</option>
         </select>
       </p>
-      {elevationMode === "parabolic" && <NumberField label="Sag (mm)" value={sagMm} onCommit={onChangeSag} />}
+      {elevationMode === "parabolic" &&
+        (unit === "ft-in" ? (
+          <LengthField label="Sag (ft-in)" valueMm={sagMm} unit={unit} onCommit={onChangeSag} />
+        ) : (
+          <NumberField label="Sag (mm)" value={sagMm} onCommit={onChangeSag} />
+        ))}
     </>
   );
 }
@@ -454,12 +468,13 @@ function FanElevationFields({ elevationMode, sagMm, onChangeMode, onChangeSag }:
 interface FanPreviewPanelProps {
   draft: FanDraft;
   sections: Section[];
+  unit: DisplayLengthUnit;
   onUpdateDraft: (patch: Partial<FanDraft>) => void;
   onCommit: () => void;
   onCancel: () => void;
 }
 
-function FanPreviewPanel({ draft, sections, onUpdateDraft, onCommit, onCancel }: FanPreviewPanelProps) {
+function FanPreviewPanel({ draft, sections, unit, onUpdateDraft, onCommit, onCancel }: FanPreviewPanelProps) {
   return (
     <div className="inspector__drawing-panel">
       <h3>Fan field preview</h3>
@@ -467,6 +482,7 @@ function FanPreviewPanel({ draft, sections, onUpdateDraft, onCommit, onCancel }:
         distributionMode={draft.distributionMode}
         count={draft.count}
         spacingMm={draft.spacingMm}
+        unit={unit}
         onChangeMode={(distributionMode) => onUpdateDraft({ distributionMode })}
         onChangeCount={(count) => onUpdateDraft({ count })}
         onChangeSpacing={(spacingMm) => onUpdateDraft({ spacingMm })}
@@ -484,6 +500,7 @@ function FanPreviewPanel({ draft, sections, onUpdateDraft, onCommit, onCancel }:
       <FanElevationFields
         elevationMode={draft.elevationMode}
         sagMm={draft.sagMm}
+        unit={unit}
         onChangeMode={(elevationMode) => onUpdateDraft({ elevationMode })}
         onChangeSag={(sagMm) => onUpdateDraft({ sagMm })}
       />
@@ -507,11 +524,12 @@ function FanPreviewPanel({ draft, sections, onUpdateDraft, onCommit, onCancel }:
 interface FanFieldEditPanelProps {
   fanField: FanField;
   sections: Section[];
+  unit: DisplayLengthUnit;
   onUpdate: (patch: FanFieldPatch) => CommandOutcome;
   onDelete: () => void;
 }
 
-function FanFieldEditPanel({ fanField, sections, onUpdate, onDelete }: FanFieldEditPanelProps) {
+function FanFieldEditPanel({ fanField, sections, unit, onUpdate, onDelete }: FanFieldEditPanelProps) {
   const distributionMode = fanField.distribution.mode;
   const count = fanField.distribution.mode === "count" ? fanField.distribution.count : 5;
   const spacingMm = fanField.distribution.mode === "spacing" ? fanField.distribution.spacingMm : 600;
@@ -531,6 +549,7 @@ function FanFieldEditPanel({ fanField, sections, onUpdate, onDelete }: FanFieldE
         distributionMode={distributionMode}
         count={count}
         spacingMm={spacingMm}
+        unit={unit}
         onChangeMode={(mode) =>
           onUpdate({ distribution: mode === "count" ? { mode: "count", count } : { mode: "spacing", spacingMm } })
         }
@@ -550,6 +569,7 @@ function FanFieldEditPanel({ fanField, sections, onUpdate, onDelete }: FanFieldE
       <FanElevationFields
         elevationMode={elevationMode}
         sagMm={sagMm}
+        unit={unit}
         onChangeMode={(mode) =>
           onUpdate({ elevationRule: mode === "linear" ? { kind: "linear" } : { kind: "parabolic", sagMm } })
         }
@@ -658,11 +678,12 @@ function CandidateListPanel({ candidates, onSelectCandidate }: CandidateListPane
 
 interface CandidateConfirmPanelProps {
   candidate: SceneJointCandidate;
+  unit: DisplayLengthUnit;
   onConfirm: (candidate: SceneJointCandidate, crossingBehavior: CrossingBehavior, engineeringStatus: EngineeringStatus) => CommandOutcome;
   onCancel: () => void;
 }
 
-function CandidateConfirmPanel({ candidate, onConfirm, onCancel }: CandidateConfirmPanelProps) {
+function CandidateConfirmPanel({ candidate, unit, onConfirm, onCancel }: CandidateConfirmPanelProps) {
   const [crossingBehavior, setCrossingBehavior] = useState<CrossingBehavior>("structural-joint");
   const [engineeringStatus, setEngineeringStatus] = useState<EngineeringStatus>("engineer-review-required");
   const [error, setError] = useState<string | null>(null);
@@ -681,7 +702,7 @@ function CandidateConfirmPanel({ candidate, onConfirm, onCancel }: CandidateConf
         <dt>Connected members</dt>
         <dd>{candidate.memberIds.join(", ")}</dd>
         <dt>Position</dt>
-        <dd>{formatPoint(candidate.position)}</dd>
+        <dd>{formatPoint(candidate.position, unit)}</dd>
       </dl>
       <JointBehaviorFields
         crossingBehavior={crossingBehavior}
@@ -811,16 +832,35 @@ export function Inspector({
             <dt>Object</dt>
             <dd>Vertex {selectedVertex.index + 1} of house outline {selectedVertex.outlineId}</dd>
           </dl>
-          <NumberField
-            label="Vertex X (mm)"
-            value={point.x}
-            onCommit={(x) => onMoveVertex(selectedVertex, { ...point, x })}
-          />
-          <NumberField
-            label="Vertex Y (mm)"
-            value={point.y}
-            onCommit={(y) => onMoveVertex(selectedVertex, { ...point, y })}
-          />
+          {displayUnits === "ft-in" ? (
+            <>
+              <LengthField
+                label="Vertex X (ft-in)"
+                valueMm={point.x}
+                unit={displayUnits}
+                onCommit={(x) => onMoveVertex(selectedVertex, { ...point, x })}
+              />
+              <LengthField
+                label="Vertex Y (ft-in)"
+                valueMm={point.y}
+                unit={displayUnits}
+                onCommit={(y) => onMoveVertex(selectedVertex, { ...point, y })}
+              />
+            </>
+          ) : (
+            <>
+              <NumberField
+                label="Vertex X (mm)"
+                value={point.x}
+                onCommit={(x) => onMoveVertex(selectedVertex, { ...point, x })}
+              />
+              <NumberField
+                label="Vertex Y (mm)"
+                value={point.y}
+                onCommit={(y) => onMoveVertex(selectedVertex, { ...point, y })}
+              />
+            </>
+          )}
           <button type="button" onClick={() => onDeleteVertex(selectedVertex)}>
             Delete vertex
           </button>
@@ -844,6 +884,7 @@ export function Inspector({
         <FanPreviewPanel
           draft={fanDraft}
           sections={sections}
+          unit={displayUnits}
           onUpdateDraft={onUpdateFanDraft}
           onCommit={onCommitFanField}
           onCancel={onCancelFanPreview}
@@ -853,6 +894,7 @@ export function Inspector({
       ) : tool === "joint" && selectedCandidate ? (
         <CandidateConfirmPanel
           candidate={selectedCandidate}
+          unit={displayUnits}
           onConfirm={onConfirmCandidate}
           onCancel={onCancelCandidateSelection}
         />
@@ -960,27 +1002,53 @@ export function Inspector({
             <dt>ID</dt>
             <dd>{selected.id}</dd>
             <dt>Top</dt>
-            <dd>{formatPoint(selected.top)}</dd>
+            <dd>{formatPoint(selected.top, displayUnits)}</dd>
             <dt>Section</dt>
             <dd>
-              {selected.widthMm} mm x {selected.depthMm} mm
+              {formatNominalLumberSize(selected.widthMm, selected.depthMm) ??
+                `${selected.widthMm} mm x ${selected.depthMm} mm`}
             </dd>
           </dl>
-          <NumberField
-            label="Base X (mm)"
-            value={selected.base.x}
-            onCommit={(x) => onMovePost(selected.id, { ...selected.base, x })}
-          />
-          <NumberField
-            label="Base Y (mm)"
-            value={selected.base.y}
-            onCommit={(y) => onMovePost(selected.id, { ...selected.base, y })}
-          />
-          <NumberField
-            label="Height (mm)"
-            value={selected.top.z - selected.base.z}
-            onCommit={(heightMm) => onUpdatePost(selected.id, { heightMm })}
-          />
+          {displayUnits === "ft-in" ? (
+            <>
+              <LengthField
+                label="Base X (ft-in)"
+                valueMm={selected.base.x}
+                unit={displayUnits}
+                onCommit={(x) => onMovePost(selected.id, { ...selected.base, x })}
+              />
+              <LengthField
+                label="Base Y (ft-in)"
+                valueMm={selected.base.y}
+                unit={displayUnits}
+                onCommit={(y) => onMovePost(selected.id, { ...selected.base, y })}
+              />
+              <LengthField
+                label="Height (ft-in)"
+                valueMm={selected.top.z - selected.base.z}
+                unit={displayUnits}
+                onCommit={(heightMm) => onUpdatePost(selected.id, { heightMm })}
+              />
+            </>
+          ) : (
+            <>
+              <NumberField
+                label="Base X (mm)"
+                value={selected.base.x}
+                onCommit={(x) => onMovePost(selected.id, { ...selected.base, x })}
+              />
+              <NumberField
+                label="Base Y (mm)"
+                value={selected.base.y}
+                onCommit={(y) => onMovePost(selected.id, { ...selected.base, y })}
+              />
+              <NumberField
+                label="Height (mm)"
+                value={selected.top.z - selected.base.z}
+                onCommit={(heightMm) => onUpdatePost(selected.id, { heightMm })}
+              />
+            </>
+          )}
           {sections.length > 0 && (
             <SectionField
               sections={sections}
@@ -1004,9 +1072,9 @@ export function Inspector({
             <dt>ID</dt>
             <dd>{selected.id}</dd>
             <dt>Start</dt>
-            <dd>{formatPoint(selected.start)}</dd>
+            <dd>{formatPoint(selected.start, displayUnits)}</dd>
             <dt>End</dt>
-            <dd>{formatPoint(selected.end)}</dd>
+            <dd>{formatPoint(selected.end, displayUnits)}</dd>
           </dl>
           {!fanFieldForSelected && (
             <>
@@ -1031,6 +1099,7 @@ export function Inspector({
             <FanFieldEditPanel
               fanField={fanFieldForSelected}
               sections={sections}
+              unit={displayUnits}
               onUpdate={(patch) => onUpdateFanField(fanFieldForSelected.id, patch)}
               onDelete={() => onDeleteFanField(fanFieldForSelected.id)}
             />
@@ -1045,25 +1114,50 @@ export function Inspector({
             <dt>ID</dt>
             <dd>{selected.id}</dd>
             <dt>Position</dt>
-            <dd>{formatPoint(selected.position)}</dd>
+            <dd>{formatPoint(selected.position, displayUnits)}</dd>
             <dt>Connected members</dt>
             <dd>{selected.connectedMemberIds.join(", ")}</dd>
           </dl>
-          <NumberField
-            label="Position X (mm)"
-            value={selected.position.x}
-            onCommit={(x) => onUpdateJoint(selected.id, { positionMm: { ...selected.position, x } })}
-          />
-          <NumberField
-            label="Position Y (mm)"
-            value={selected.position.y}
-            onCommit={(y) => onUpdateJoint(selected.id, { positionMm: { ...selected.position, y } })}
-          />
-          <NumberField
-            label="Position Z (mm)"
-            value={selected.position.z}
-            onCommit={(z) => onUpdateJoint(selected.id, { positionMm: { ...selected.position, z } })}
-          />
+          {displayUnits === "ft-in" ? (
+            <>
+              <LengthField
+                label="Position X (ft-in)"
+                valueMm={selected.position.x}
+                unit={displayUnits}
+                onCommit={(x) => onUpdateJoint(selected.id, { positionMm: { ...selected.position, x } })}
+              />
+              <LengthField
+                label="Position Y (ft-in)"
+                valueMm={selected.position.y}
+                unit={displayUnits}
+                onCommit={(y) => onUpdateJoint(selected.id, { positionMm: { ...selected.position, y } })}
+              />
+              <LengthField
+                label="Position Z (ft-in)"
+                valueMm={selected.position.z}
+                unit={displayUnits}
+                onCommit={(z) => onUpdateJoint(selected.id, { positionMm: { ...selected.position, z } })}
+              />
+            </>
+          ) : (
+            <>
+              <NumberField
+                label="Position X (mm)"
+                value={selected.position.x}
+                onCommit={(x) => onUpdateJoint(selected.id, { positionMm: { ...selected.position, x } })}
+              />
+              <NumberField
+                label="Position Y (mm)"
+                value={selected.position.y}
+                onCommit={(y) => onUpdateJoint(selected.id, { positionMm: { ...selected.position, y } })}
+              />
+              <NumberField
+                label="Position Z (mm)"
+                value={selected.position.z}
+                onCommit={(z) => onUpdateJoint(selected.id, { positionMm: { ...selected.position, z } })}
+              />
+            </>
+          )}
           <JointBehaviorFields
             crossingBehavior={selected.crossingBehavior}
             engineeringStatus={selected.engineeringStatus}
