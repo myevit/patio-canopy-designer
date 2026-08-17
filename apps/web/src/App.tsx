@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useReducer, useRef } from "react";
-import { buildCutFabrication, buildMemberSchedule, buildScene, toBomCsv, type SceneJointCandidate } from "@canopy/geometry";
+import {
+  buildBlueprintSheetSet,
+  buildCutFabrication,
+  buildMemberSchedule,
+  buildScene,
+  toBomCsv,
+  type SceneJointCandidate,
+} from "@canopy/geometry";
 import {
   DEFAULT_BEAM_SECTION_ID,
   DEFAULT_POST_SECTION_ID,
@@ -16,6 +23,7 @@ import {
   type Section,
   type Vector3Mm,
 } from "@canopy/shared";
+import { BlueprintsPanel } from "./components/BlueprintsPanel.js";
 import { BomPanel } from "./components/BomPanel.js";
 import { BottomDrawer } from "./components/BottomDrawer.js";
 import { CutsPanel } from "./components/CutsPanel.js";
@@ -90,6 +98,10 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
     [documentController.document],
   );
   const cutCards = useMemo(() => buildCutFabrication(documentController.document), [documentController.document]);
+  const blueprintSheetSet = useMemo(
+    () => buildBlueprintSheetSet(documentController.document, { generatedAt: new Date().toISOString() }),
+    [documentController.document],
+  );
 
   function dispatchGatedCommand(command: DocumentCommand): { ok: true } | { ok: false; error: string } {
     if (!persistence.loaded) {
@@ -588,6 +600,10 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
     window.print();
   }
 
+  function handlePrintBlueprints() {
+    window.print();
+  }
+
   function handleImport(file: File) {
     void file.text().then((text) => {
       const result = importProjectDocument(text);
@@ -734,6 +750,7 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
           />
         }
         cutsContent={<CutsPanel cards={cutCards} />}
+        blueprintsContent={<BlueprintsPanel sheetSet={blueprintSheetSet} onPrint={handlePrintBlueprints} />}
       />
     </div>
   );

@@ -318,6 +318,41 @@ body {
   stroke-width: 4;
 }
 
+.blueprint-sheet__svg {
+  width: 100%;
+  height: auto;
+}
+
+.blueprint-sheet__member {
+  fill: #e4e9ec;
+  stroke: #566370;
+  stroke-width: 1;
+}
+
+.blueprint-sheet__viewport-frame {
+  fill: none;
+  stroke: #aab4bd;
+  stroke-width: 0.5;
+}
+
+.blueprint-sheet__dimension-line {
+  stroke: #566370;
+  stroke-width: 0.3;
+}
+
+.blueprint-sheet__mark,
+.blueprint-sheet__view-title,
+.blueprint-sheet__dimension-label {
+  font-size: 4px;
+}
+
+.blueprint-sheet__title-block {
+  display: flex;
+  gap: 1.5rem;
+  border-top: 1px solid #566370;
+  padding: 0.5rem 0;
+}
+
 @media print {
   .studio-shell__top-bar,
   .studio-shell__body,
@@ -331,5 +366,14 @@ body {
     display: block !important;
     padding: 0;
     border: none;
+  }
+
+  .blueprints-panel__toolbar {
+    display: none;
+  }
+
+  .blueprint-sheet {
+    page-break-after: always;
+    margin: 0;
   }
 }

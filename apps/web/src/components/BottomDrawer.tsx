@@ -20,13 +20,22 @@ export interface BottomDrawerProps {
   onToggleOpen: () => void;
   bomContent?: ReactNode;
   cutsContent?: ReactNode;
+  blueprintsContent?: ReactNode;
 }
 
-export function BottomDrawer({ open, tab, onSelectTab, onToggleOpen, bomContent, cutsContent }: BottomDrawerProps) {
+export function BottomDrawer({
+  open,
+  tab,
+  onSelectTab,
+  onToggleOpen,
+  bomContent,
+  cutsContent,
+  blueprintsContent,
+}: BottomDrawerProps) {
   const content: Record<DrawerTab, ReactNode> = {
     bom: bomContent ?? <p>{TAB_DESCRIPTIONS.bom}: not available in this milestone.</p>,
     cuts: cutsContent ?? <p>{TAB_DESCRIPTIONS.cuts}: not available in this milestone.</p>,
-    blueprints: <p>{TAB_DESCRIPTIONS.blueprints}: not available in this milestone.</p>,
+    blueprints: blueprintsContent ?? <p>{TAB_DESCRIPTIONS.blueprints}: not available in this milestone.</p>,
   };
   return (
     <section aria-label="Output drawer" className={open ? "drawer drawer--open" : "drawer drawer--closed"}>

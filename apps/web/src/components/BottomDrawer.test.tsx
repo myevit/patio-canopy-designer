@@ -57,6 +57,20 @@ describe("BottomDrawer", () => {
     expect(screen.getByText("Custom cuts content")).toBeInTheDocument();
   });
 
+  it("renders the given blueprintsContent instead of the placeholder when the Blueprints tab is active", () => {
+    render(
+      <BottomDrawer
+        open
+        tab="blueprints"
+        onSelectTab={() => {}}
+        onToggleOpen={() => {}}
+        blueprintsContent={<p>Custom blueprints content</p>}
+      />,
+    );
+    expect(screen.getByText("Custom blueprints content")).toBeInTheDocument();
+    expect(screen.queryByText(/not available in this milestone/i)).not.toBeInTheDocument();
+  });
+
   it("calls onToggleOpen when the collapse/expand control is clicked", async () => {
     const user = userEvent.setup();
     const onToggleOpen = vi.fn();
