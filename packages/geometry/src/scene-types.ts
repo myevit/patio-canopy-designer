@@ -47,6 +47,7 @@ export interface ScenePost {
   top: Vector3Mm;
   baseAnchorId: string;
   topAnchorId: string;
+  sectionId: string;
   widthMm: number;
   depthMm: number;
 }
@@ -63,6 +64,7 @@ export interface SceneMember {
   role: MemberRole;
   start: Vector3Mm;
   end: Vector3Mm;
+  sectionId: string;
   widthMm: number;
   heightMm: number;
   rollRad: number;

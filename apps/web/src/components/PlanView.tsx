@@ -333,12 +333,29 @@ export function PlanView({
           x2={gutter.end.x}
           y2={gutter.end.y}
           style={{ pointerEvents: tool === "beam" ? "auto" : "none" }}
+          tabIndex={tool === "beam" ? 0 : undefined}
+          role={tool === "beam" ? "button" : undefined}
+          aria-label={tool === "beam" ? `Choose anchor on gutter ${gutter.id}` : undefined}
           onClick={
             tool === "beam"
               ? (event) => {
                   event.stopPropagation();
                   const raw = worldPointFromEvent(event);
                   const projected = projectPointOntoSegment(raw, gutter.start, gutter.end);
+                  onCreateHouseAnchorOnGutter(gutter.id, projected);
+                }
+              : undefined
+          }
+          onKeyDown={
+            tool === "beam"
+              ? (event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  const projected = projectPointOntoSegment(
+                    midpoint(gutter.start, gutter.end),
+                    gutter.start,
+                    gutter.end,
+                  );
                   onCreateHouseAnchorOnGutter(gutter.id, projected);
                 }
               : undefined
@@ -395,7 +412,13 @@ export function PlanView({
                 onSelect(post.id);
               }
             }}
-            onKeyDown={(event) => handleSelectionKey(event, post.id, onSelect)}
+            onKeyDown={(event) => {
+              if (tool === "beam") {
+                handleSelectionKey(event, post.topAnchorId, onChooseBeamAnchor);
+              } else {
+                handleSelectionKey(event, post.id, onSelect);
+              }
+            }}
           />
         );
       })}

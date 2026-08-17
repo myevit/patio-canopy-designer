@@ -61,6 +61,7 @@ function scene(): ScenePrimitives {
         top: { x: 0, y: 0, z: 2400 },
         baseAnchorId: "anchor-base",
         topAnchorId: "anchor-top",
+        sectionId: "sec-post",
         widthMm: 140,
         depthMm: 140,
       },
@@ -72,6 +73,7 @@ function scene(): ScenePrimitives {
         role: "fan-rafter",
         start: { x: 0, y: 0, z: 2700 },
         end: { x: 1000, y: 500, z: 2400 },
+        sectionId: "sec-beam",
         widthMm: 89,
         heightMm: 38,
         rollRad: 0,
@@ -178,6 +180,30 @@ describe("ThreeView beam flow", () => {
     );
     await user.click(screen.getByRole("button", { name: "Select post-1 in 3D scene" }));
     expect(onChooseBeamAnchor).toHaveBeenCalledWith("anchor-top");
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("the accessible fallback list also includes house anchors, routed through the beam-anchor handler when the Beam tool is active", async () => {
+    const user = userEvent.setup();
+    const onChooseBeamAnchor = vi.fn();
+    render(
+      <ThreeView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="beam"
+        onChooseBeamAnchor={onChooseBeamAnchor}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Select anchor-house-1 in 3D scene" }));
+    expect(onChooseBeamAnchor).toHaveBeenCalledWith("anchor-house-1");
+  });
+
+  it("the accessible fallback list's house anchor button is a no-op outside the Beam tool", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<ThreeView scene={scene()} selectedObjectId={null} onSelect={onSelect} tool="select" />);
+    await user.click(screen.getByRole("button", { name: "Select anchor-house-1 in 3D scene" }));
     expect(onSelect).not.toHaveBeenCalled();
   });
 });

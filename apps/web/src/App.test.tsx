@@ -273,6 +273,59 @@ describe("App: posts and beams", () => {
     expect(after.at(-1)!).toHaveAttribute("cy", "2000");
   });
 
+  it("places a post entirely via the keyboard-operable coordinate-entry panel in the Inspector", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const before = screen.getAllByTestId(/^scene-object-post-/).length;
+
+    await user.click(screen.getByRole("button", { name: "Post" }));
+    await user.clear(screen.getByLabelText(/^x \(mm\)/i));
+    await user.type(screen.getByLabelText(/^x \(mm\)/i), "2000");
+    await user.clear(screen.getByLabelText(/^y \(mm\)/i));
+    await user.type(screen.getByLabelText(/^y \(mm\)/i), "3000");
+    await user.click(screen.getByRole("button", { name: /^add post$/i }));
+
+    const after = screen.getAllByTestId(/^scene-object-post-/);
+    expect(after.length).toBe(before + 1);
+    expect(after.at(-1)!).toHaveAttribute("cx", "2000");
+    expect(after.at(-1)!).toHaveAttribute("cy", "3000");
+  });
+
+  it("connects two keyboard-placed posts with a beam using only Tab/Enter, no pointer", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    async function placePostViaKeyboard(x: string, y: string) {
+      await user.clear(screen.getByLabelText(/^x \(mm\)/i));
+      await user.type(screen.getByLabelText(/^x \(mm\)/i), x);
+      await user.clear(screen.getByLabelText(/^y \(mm\)/i));
+      await user.type(screen.getByLabelText(/^y \(mm\)/i), y);
+      await user.click(screen.getByRole("button", { name: /^add post$/i }));
+    }
+
+    await user.click(screen.getByRole("button", { name: "Post" }));
+    await placePostViaKeyboard("2000", "2000");
+    await placePostViaKeyboard("5000", "2000");
+    const posts = screen.getAllByTestId(/^scene-object-post-/);
+    const postA = posts.at(-2)!;
+    const postB = posts.at(-1)!;
+    const beamsBefore = screen.getAllByTestId(/^scene-object-member-/).length;
+
+    await user.click(screen.getByRole("button", { name: "Beam" }));
+    postA.focus();
+    await user.keyboard("{Enter}");
+    postB.focus();
+    await user.keyboard("{Enter}");
+
+    const beams = screen.getAllByTestId(/^scene-object-member-/);
+    expect(beams.length).toBe(beamsBefore + 1);
+    const newBeam = beams.at(-1)!;
+    expect(newBeam).toHaveAttribute("x1", "2000");
+    expect(newBeam).toHaveAttribute("y1", "2000");
+    expect(newBeam).toHaveAttribute("x2", "5000");
+    expect(newBeam).toHaveAttribute("y2", "2000");
+  });
+
   it("Beam tool: choosing a start post then an end post commits a beam between their top anchors", async () => {
     mockRect();
     const user = userEvent.setup();

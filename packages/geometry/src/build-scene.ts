@@ -99,6 +99,7 @@ export function buildScene(document: ProjectDocument): ScenePrimitives {
         top: anchorPosition(anchors, post.topAnchorId),
         baseAnchorId: post.baseAnchorId,
         topAnchorId: post.topAnchorId,
+        sectionId: post.sectionId,
         widthMm,
         depthMm: heightMm,
       };
@@ -111,6 +112,7 @@ export function buildScene(document: ProjectDocument): ScenePrimitives {
         role: member.role,
         start: anchorPosition(anchors, member.startAnchorId),
         end: anchorPosition(anchors, member.endAnchorId),
+        sectionId: member.sectionId,
         widthMm,
         heightMm,
         rollRad: member.rollRad,

@@ -97,6 +97,7 @@ describe("buildScene", () => {
       top: { x: 10, y: 20, z: 2400 },
       baseAnchorId: "a-base",
       topAnchorId: "a-top",
+      sectionId: "sec-post",
       widthMm: 140,
       depthMm: 140,
     });
@@ -119,6 +120,7 @@ describe("buildScene", () => {
       role: "fan-rafter",
       start: { x: 0, y: 0, z: 2700 },
       end: { x: 10, y: 20, z: 2400 },
+      sectionId: "sec-beam",
       widthMm: 184,
       heightMm: 38,
       rollRad: 0,

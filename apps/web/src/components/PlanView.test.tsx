@@ -39,6 +39,7 @@ function scene(): ScenePrimitives {
         top: { x: 50, y: 400, z: 2400 },
         baseAnchorId: "anchor-base",
         topAnchorId: "anchor-top",
+        sectionId: "sec-post",
         widthMm: 140,
         depthMm: 140,
       },
@@ -50,6 +51,7 @@ function scene(): ScenePrimitives {
         role: "fan-rafter",
         start: { x: 0, y: 0, z: 2700 },
         end: { x: 50, y: 400, z: 2400 },
+        sectionId: "sec-beam",
         widthMm: 89,
         heightMm: 38,
         rollRad: 0,
@@ -418,6 +420,72 @@ describe("PlanView beam flow", () => {
     expect(onChooseBeamAnchor).toHaveBeenCalledWith("anchor-house-1");
   });
 
+  it("selects a focused post's top anchor via Enter when the Beam tool is active, instead of selecting it", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const onChooseBeamAnchor = vi.fn();
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={onSelect}
+        tool="beam"
+        onChooseBeamAnchor={onChooseBeamAnchor}
+      />,
+    );
+    const post = screen.getByTestId("scene-object-post-1");
+    post.focus();
+    await user.keyboard("{Enter}");
+    expect(onChooseBeamAnchor).toHaveBeenCalledWith("anchor-top");
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("selects a focused post's top anchor via Space when the Beam tool is active", async () => {
+    const user = userEvent.setup();
+    const onChooseBeamAnchor = vi.fn();
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="beam"
+        onChooseBeamAnchor={onChooseBeamAnchor}
+      />,
+    );
+    const post = screen.getByTestId("scene-object-post-1");
+    post.focus();
+    await user.keyboard(" ");
+    expect(onChooseBeamAnchor).toHaveBeenCalledWith("anchor-top");
+  });
+
+  it("still selects a focused post via Enter outside the Beam tool", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<PlanView scene={scene()} selectedObjectId={null} onSelect={onSelect} tool="select" />);
+    const post = screen.getByTestId("scene-object-post-1");
+    post.focus();
+    await user.keyboard("{Enter}");
+    expect(onSelect).toHaveBeenCalledWith("post-1");
+  });
+
+  it("selects a focused house anchor via Enter when the Beam tool is active", async () => {
+    const user = userEvent.setup();
+    const onChooseBeamAnchor = vi.fn();
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="beam"
+        onChooseBeamAnchor={onChooseBeamAnchor}
+      />,
+    );
+    const anchor = screen.getByTestId("scene-object-anchor-house-1");
+    anchor.focus();
+    await user.keyboard("{Enter}");
+    expect(onChooseBeamAnchor).toHaveBeenCalledWith("anchor-house-1");
+  });
+
   it("renders a valid preview beam line when hovering a different candidate anchor", () => {
     render(
       <PlanView
@@ -537,5 +605,46 @@ describe("PlanView roof and gutter rendering", () => {
     );
     fireEvent.click(screen.getByTestId("gutter-gutter-1"), { clientX: 650, clientY: 350 });
     expect(onCreateHouseAnchorOnGutter).toHaveBeenCalledWith("gutter-1", { x: 50, y: -300, z: 2700 });
+  });
+
+  it("is keyboard focusable while the Beam tool is active, and Enter projects a house anchor onto its midpoint", async () => {
+    const user = userEvent.setup();
+    const onCreateHouseAnchorOnGutter = vi.fn();
+    render(
+      <PlanView
+        scene={sceneWithRoofOverHouse()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="beam"
+        onCreateHouseAnchorOnGutter={onCreateHouseAnchorOnGutter}
+      />,
+    );
+    const gutter = screen.getByTestId("gutter-gutter-1");
+    gutter.focus();
+    await user.keyboard("{Enter}");
+    expect(onCreateHouseAnchorOnGutter).toHaveBeenCalledWith("gutter-1", { x: 50, y: -300, z: 2700 });
+  });
+
+  it("responds to Space the same way as Enter for keyboard gutter anchoring", async () => {
+    const user = userEvent.setup();
+    const onCreateHouseAnchorOnGutter = vi.fn();
+    render(
+      <PlanView
+        scene={sceneWithRoofOverHouse()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="beam"
+        onCreateHouseAnchorOnGutter={onCreateHouseAnchorOnGutter}
+      />,
+    );
+    const gutter = screen.getByTestId("gutter-gutter-1");
+    gutter.focus();
+    await user.keyboard(" ");
+    expect(onCreateHouseAnchorOnGutter).toHaveBeenCalledWith("gutter-1", { x: 50, y: -300, z: 2700 });
+  });
+
+  it("is not part of the tab order outside the Beam tool", () => {
+    render(<PlanView scene={sceneWithRoofOverHouse()} selectedObjectId={null} onSelect={() => {}} tool="select" />);
+    expect(screen.getByTestId("gutter-gutter-1")).not.toHaveAttribute("tabIndex");
   });
 });

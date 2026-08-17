@@ -449,6 +449,7 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
           gutter={gutterForSelectedRoofPlane}
           drawingPoints={drawingPoints}
           sections={documentController.document.sections}
+          tool={state.tool}
           onMoveVertex={handleMoveVertex}
           onDeleteVertex={handleDeleteVertex}
           onAddRoofPlane={handleAddRoofPlane}
@@ -457,6 +458,7 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
           onAddDrawingPoint={(point) => dispatch({ type: "add-outline-point", point })}
           onRemoveLastDrawingPoint={() => dispatch({ type: "remove-last-outline-point" })}
           onCloseDrawing={closeDrawing}
+          onPlacePost={handlePlacePost}
           onMovePost={handleMovePost}
           onUpdatePost={handleUpdatePost}
           onDuplicatePost={handleDuplicatePost}

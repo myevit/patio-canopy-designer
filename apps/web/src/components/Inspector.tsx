@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { SceneGutter, SceneObject, SceneRoofPlane } from "@canopy/geometry";
 import type { Section, Vector3Mm } from "@canopy/shared";
 import type { SelectedVertex } from "../state/selected-vertex.js";
+import type { ToolId } from "../state/tool.js";
 
 const MEMBER_ROLE_LABELS: Record<string, string> = {
   ledger: "Ledger",
@@ -85,18 +86,34 @@ function NumberField({ label, value, onCommit }: NumberFieldProps) {
   );
 }
 
-interface SectionSelectProps {
+interface SectionFieldProps {
   sections: Section[];
-  value: string;
+  sectionId: string;
   onCommit: (sectionId: string) => void;
 }
 
-function SectionSelect({ sections, value, onCommit }: SectionSelectProps) {
+function SectionField({ sections, sectionId, onCommit }: SectionFieldProps) {
   const id = useId();
+  const hasSection = sections.some((section) => section.id === sectionId);
+
+  if (!hasSection) {
+    return (
+      <p className="inspector__field">
+        <label htmlFor={id}>Section</label>
+        <select id={id} value={sectionId} disabled aria-invalid={true}>
+          <option value={sectionId}>Unknown section</option>
+        </select>
+        <span role="alert">
+          Section &quot;{sectionId}&quot; is not in this document. Fix the reference before changing it.
+        </span>
+      </p>
+    );
+  }
+
   return (
     <p className="inspector__field">
       <label htmlFor={id}>Section</label>
-      <select id={id} value={value} onChange={(event) => onCommit(event.target.value)}>
+      <select id={id} value={sectionId} onChange={(event) => onCommit(event.target.value)}>
         {sections.map((section) => (
           <option key={section.id} value={section.id}>
             {section.name}
@@ -158,6 +175,49 @@ function HouseDrawingPanel({ points, onAddPoint, onRemoveLastPoint, onCloseOutli
   );
 }
 
+interface PostPlacementPanelProps {
+  onPlacePost: (position: Vector3Mm) => void;
+}
+
+function PostPlacementPanel({ onPlacePost }: PostPlacementPanelProps) {
+  const xId = useId();
+  const yId = useId();
+  const [x, setX] = useState("0");
+  const [y, setY] = useState("0");
+
+  function handleAddPost() {
+    const parsedX = Number(x);
+    const parsedY = Number(y);
+    if (!Number.isFinite(parsedX) || !Number.isFinite(parsedY)) return;
+    onPlacePost({ x: parsedX, y: parsedY, z: 0 });
+  }
+
+  function handleClear() {
+    setX("0");
+    setY("0");
+  }
+
+  return (
+    <div className="inspector__drawing-panel">
+      <h3>Place post</h3>
+      <p className="inspector__field">
+        <label htmlFor={xId}>X (mm)</label>
+        <input id={xId} type="number" value={x} onChange={(event) => setX(event.target.value)} />
+      </p>
+      <p className="inspector__field">
+        <label htmlFor={yId}>Y (mm)</label>
+        <input id={yId} type="number" value={y} onChange={(event) => setY(event.target.value)} />
+      </p>
+      <button type="button" onClick={handleAddPost}>
+        Add post
+      </button>
+      <button type="button" onClick={handleClear}>
+        Clear
+      </button>
+    </div>
+  );
+}
+
 function formatDegrees(radians: number): number {
   return Number(((radians * 180) / Math.PI).toFixed(4));
 }
@@ -180,6 +240,7 @@ export interface InspectorProps {
   gutter?: SceneGutter | null;
   drawingPoints?: Vector3Mm[] | null;
   sections?: Section[];
+  tool?: ToolId;
   onMoveVertex?: (vertex: SelectedVertex, position: Vector3Mm) => CommandOutcome;
   onDeleteVertex?: (vertex: SelectedVertex) => void;
   onAddRoofPlane?: (houseOutlineId: string) => void;
@@ -188,6 +249,7 @@ export interface InspectorProps {
   onAddDrawingPoint?: (point: Vector3Mm) => void;
   onRemoveLastDrawingPoint?: () => void;
   onCloseDrawing?: () => void;
+  onPlacePost?: (position: Vector3Mm) => void;
   onMovePost?: (postId: string, position: Vector3Mm) => CommandOutcome;
   onUpdatePost?: (postId: string, patch: PostPatch) => CommandOutcome;
   onDuplicatePost?: (postId: string) => void;
@@ -204,6 +266,7 @@ export function Inspector({
   gutter = null,
   drawingPoints = null,
   sections = [],
+  tool = "select",
   onMoveVertex = () => {},
   onDeleteVertex = () => {},
   onAddRoofPlane = () => {},
@@ -212,6 +275,7 @@ export function Inspector({
   onAddDrawingPoint = () => {},
   onRemoveLastDrawingPoint = () => {},
   onCloseDrawing = () => {},
+  onPlacePost = () => {},
   onMovePost = () => {},
   onUpdatePost = () => {},
   onDuplicatePost = () => {},
@@ -257,6 +321,8 @@ export function Inspector({
           onRemoveLastPoint={onRemoveLastDrawingPoint}
           onCloseOutline={onCloseDrawing}
         />
+      ) : tool === "post" ? (
+        <PostPlacementPanel onPlacePost={onPlacePost} />
       ) : (
         !selected && <p>No selection. Choose a post, member, or joint to inspect it.</p>
       )}
@@ -345,9 +411,9 @@ export function Inspector({
             onCommit={(heightMm) => onUpdatePost(selected.id, { heightMm })}
           />
           {sections.length > 0 && (
-            <SectionSelect
+            <SectionField
               sections={sections}
-              value={sections.find((s) => s.widthMm === selected.widthMm && s.heightMm === selected.depthMm)?.id ?? sections[0]!.id}
+              sectionId={selected.sectionId}
               onCommit={(sectionId) => onUpdatePost(selected.id, { sectionId })}
             />
           )}
@@ -372,12 +438,9 @@ export function Inspector({
             <dd>{formatPoint(selected.end)}</dd>
           </dl>
           {sections.length > 0 && (
-            <SectionSelect
+            <SectionField
               sections={sections}
-              value={
-                sections.find((s) => s.widthMm === selected.widthMm && s.heightMm === selected.heightMm)?.id ??
-                sections[0]!.id
-              }
+              sectionId={selected.sectionId}
               onCommit={(sectionId) => onUpdateBeam(selected.id, { sectionId })}
             />
           )}

@@ -66,6 +66,7 @@ export function ThreeView({
   onChooseBeamAnchor = () => {},
 }: ThreeViewProps) {
   const selectableObjects = [...scene.posts, ...scene.members, ...scene.joints];
+  const accessibleObjects = [...selectableObjects, ...scene.houseAnchors];
   function handlePostClick(event: ThreeEvent<MouseEvent>, postId: string, topAnchorId: string) {
     event.stopPropagation();
     if (tool === "beam") {
@@ -178,7 +179,7 @@ export function ThreeView({
       })}
       </Canvas>
       <div className="sr-only" role="group" aria-label="3D scene objects">
-        {selectableObjects.map((object) => (
+        {accessibleObjects.map((object) => (
           <button
             key={object.id}
             type="button"
@@ -187,7 +188,9 @@ export function ThreeView({
             onClick={() => {
               if (tool === "beam" && object.kind === "post") {
                 onChooseBeamAnchor(object.topAnchorId);
-              } else {
+              } else if (tool === "beam" && object.kind === "house-anchor") {
+                onChooseBeamAnchor(object.id);
+              } else if (object.kind !== "house-anchor") {
                 onSelect(object.id);
               }
             }}

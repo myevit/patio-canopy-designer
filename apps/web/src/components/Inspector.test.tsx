@@ -17,6 +17,7 @@ describe("Inspector", () => {
       top: { x: 100, y: 200, z: 2400 },
       baseAnchorId: "anchor-base",
       topAnchorId: "anchor-top",
+      sectionId: "sec-post",
       widthMm: 140,
       depthMm: 140,
     };
@@ -34,6 +35,7 @@ describe("Inspector", () => {
       role: "fan-rafter",
       start: { x: 0, y: 0, z: 2700 },
       end: { x: 0, y: 0, z: 2400 },
+      sectionId: "sec-beam",
       widthMm: 89,
       heightMm: 38,
       rollRad: 0,
@@ -65,6 +67,7 @@ describe("Inspector post editing", () => {
     top: { x: 100, y: 200, z: 2400 },
     baseAnchorId: "anchor-base",
     topAnchorId: "anchor-top",
+    sectionId: "sec-post",
     widthMm: 140,
     depthMm: 140,
   };
@@ -128,6 +131,7 @@ describe("Inspector beam editing", () => {
     role: "perimeter-beam",
     start: { x: 0, y: 0, z: 2400 },
     end: { x: 1000, y: 0, z: 2400 },
+    sectionId: "sec-beam",
     widthMm: 184,
     heightMm: 38,
     rollRad: 0,
@@ -164,6 +168,101 @@ describe("Inspector beam editing", () => {
     render(<Inspector selected={member} sections={sections} onDeleteBeam={onDeleteBeam} />);
     fireEvent.click(screen.getByRole("button", { name: /delete beam/i }));
     expect(onDeleteBeam).toHaveBeenCalledWith("member-1");
+  });
+});
+
+describe("Inspector section select fidelity", () => {
+  // Two sections that share identical dimensions: a widthxheight reverse
+  // match cannot tell them apart, only the object's stored sectionId can.
+  const sections = [
+    { id: "sec-a", name: "Section A (140x140)", widthMm: 140, heightMm: 140 },
+    { id: "sec-b", name: "Section B (140x140)", widthMm: 140, heightMm: 140 },
+  ];
+
+  it("binds the post's section select to its stored sectionId, not a reverse-matched dimension", () => {
+    const post: SceneObject = {
+      id: "post-1",
+      kind: "post",
+      base: { x: 0, y: 0, z: 0 },
+      top: { x: 0, y: 0, z: 2400 },
+      baseAnchorId: "anchor-base",
+      topAnchorId: "anchor-top",
+      sectionId: "sec-b",
+      widthMm: 140,
+      depthMm: 140,
+    };
+    render(<Inspector selected={post} sections={sections} />);
+    expect(screen.getByLabelText(/section/i)).toHaveValue("sec-b");
+  });
+
+  it("binds the beam's section select to its stored sectionId, not a reverse-matched dimension", () => {
+    const member: SceneObject = {
+      id: "member-1",
+      kind: "member",
+      role: "perimeter-beam",
+      start: { x: 0, y: 0, z: 2400 },
+      end: { x: 1000, y: 0, z: 2400 },
+      sectionId: "sec-b",
+      widthMm: 140,
+      heightMm: 140,
+      rollRad: 0,
+    };
+    render(<Inspector selected={member} sections={sections} />);
+    expect(screen.getByLabelText(/section/i)).toHaveValue("sec-b");
+  });
+
+  it("commits the exact sectionId chosen, unaffected by other same-dimension sections", () => {
+    const onUpdatePost = vi.fn();
+    const post: SceneObject = {
+      id: "post-1",
+      kind: "post",
+      base: { x: 0, y: 0, z: 0 },
+      top: { x: 0, y: 0, z: 2400 },
+      baseAnchorId: "anchor-base",
+      topAnchorId: "anchor-top",
+      sectionId: "sec-a",
+      widthMm: 140,
+      depthMm: 140,
+    };
+    render(<Inspector selected={post} sections={sections} onUpdatePost={onUpdatePost} />);
+    fireEvent.change(screen.getByLabelText(/section/i), { target: { value: "sec-b" } });
+    expect(onUpdatePost).toHaveBeenCalledWith("post-1", { sectionId: "sec-b" });
+  });
+
+  it("shows a recoverable error and disables the section select when the post's stored sectionId is missing from the document", () => {
+    const onUpdatePost = vi.fn();
+    const post: SceneObject = {
+      id: "post-1",
+      kind: "post",
+      base: { x: 0, y: 0, z: 0 },
+      top: { x: 0, y: 0, z: 2400 },
+      baseAnchorId: "anchor-base",
+      topAnchorId: "anchor-top",
+      sectionId: "sec-missing",
+      widthMm: 140,
+      depthMm: 140,
+    };
+    render(<Inspector selected={post} sections={sections} onUpdatePost={onUpdatePost} />);
+    expect(screen.getByLabelText(/section/i)).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent(/sec-missing/i);
+    expect(onUpdatePost).not.toHaveBeenCalled();
+  });
+
+  it("shows a recoverable error and disables the section select when the beam's stored sectionId is missing from the document", () => {
+    const member: SceneObject = {
+      id: "member-1",
+      kind: "member",
+      role: "perimeter-beam",
+      start: { x: 0, y: 0, z: 2400 },
+      end: { x: 1000, y: 0, z: 2400 },
+      sectionId: "sec-missing",
+      widthMm: 140,
+      heightMm: 140,
+      rollRad: 0,
+    };
+    render(<Inspector selected={member} sections={sections} />);
+    expect(screen.getByLabelText(/section/i)).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent(/sec-missing/i);
   });
 });
 
@@ -468,5 +567,38 @@ describe("Inspector keyboard house drawing panel", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /remove last point/i }));
     expect(onRemoveLastDrawingPoint).toHaveBeenCalled();
+  });
+});
+
+describe("Inspector keyboard post placement panel", () => {
+  it("shows X/Y coordinate entry and Add post / Clear controls while the Post tool is active", () => {
+    render(<Inspector selected={undefined} tool="post" />);
+    expect(screen.getByLabelText(/^x \(mm\)/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^y \(mm\)/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^add post$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^clear$/i })).toBeInTheDocument();
+  });
+
+  it("does not show the post placement panel outside the Post tool", () => {
+    render(<Inspector selected={undefined} tool="select" />);
+    expect(screen.queryByRole("button", { name: /^add post$/i })).not.toBeInTheDocument();
+  });
+
+  it("places a post from the typed coordinates", () => {
+    const onPlacePost = vi.fn();
+    render(<Inspector selected={undefined} tool="post" onPlacePost={onPlacePost} />);
+    fireEvent.change(screen.getByLabelText(/^x \(mm\)/i), { target: { value: "1200" } });
+    fireEvent.change(screen.getByLabelText(/^y \(mm\)/i), { target: { value: "3400" } });
+    fireEvent.click(screen.getByRole("button", { name: /^add post$/i }));
+    expect(onPlacePost).toHaveBeenCalledWith({ x: 1200, y: 3400, z: 0 });
+  });
+
+  it("clears the typed coordinates back to zero", () => {
+    render(<Inspector selected={undefined} tool="post" />);
+    fireEvent.change(screen.getByLabelText(/^x \(mm\)/i), { target: { value: "1200" } });
+    fireEvent.change(screen.getByLabelText(/^y \(mm\)/i), { target: { value: "3400" } });
+    fireEvent.click(screen.getByRole("button", { name: /^clear$/i }));
+    expect(screen.getByLabelText(/^x \(mm\)/i)).toHaveValue(0);
+    expect(screen.getByLabelText(/^y \(mm\)/i)).toHaveValue(0);
   });
 });

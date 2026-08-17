@@ -31,6 +31,47 @@ test("draws a house outline entirely via the keyboard (no pointer input)", async
   await expect(page.getByLabel(/^House outline/)).toHaveCount(1);
 });
 
+test("places two posts and connects them with a beam entirely via the keyboard (no pointer input)", async ({
+  page,
+}) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "New", exact: true }).click();
+
+  const posts = page.locator('[data-testid^="scene-object-post-"]');
+  const beams = page.locator('[data-testid^="scene-object-member-"]');
+
+  async function placePostViaKeyboard(x: string, y: string) {
+    const xField = page.getByLabel(/^x \(mm\)/i);
+    await xField.fill(x);
+    const yField = page.getByLabel(/^y \(mm\)/i);
+    await yField.fill(y);
+    const addButton = page.getByRole("button", { name: /^add post$/i });
+    await addButton.focus();
+    await page.keyboard.press("Enter");
+  }
+
+  await page.getByRole("button", { name: "Post", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await placePostViaKeyboard("2000", "2000");
+  await placePostViaKeyboard("5000", "2000");
+  await expect(posts).toHaveCount(2);
+
+  await page.getByRole("button", { name: "Beam", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("status")).toContainText(/start anchor/i);
+  await posts.nth(0).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("status")).toContainText(/end anchor/i);
+  await posts.nth(1).focus();
+  await page.keyboard.press("Enter");
+  await expect(beams).toHaveCount(1);
+
+  expect(pageErrors).toEqual([]);
+});
+
 test("moving a vertex updates the plan polygon and the 3D view renders the same revision without error", async ({
   page,
 }) => {
