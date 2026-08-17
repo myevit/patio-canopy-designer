@@ -4,6 +4,8 @@ import {
   memberAnalysisScope,
   postAnalysisScope,
   type AnalysisSnapshot,
+  type AnalyzedLoadProvenance,
+  type LoadProvenance,
   type MemberAnalysisReport,
   type PostAnalysisReport,
 } from "@canopy/calculations";
@@ -21,6 +23,19 @@ function parseOptionalNumber(text: string): number | undefined {
 
 function StatusBadge({ status }: { status: string }) {
   return <span data-testid="analysis-status-badge">Status: {status}</span>;
+}
+
+function LoadProvenanceList({ entries }: { entries: AnalyzedLoadProvenance[] }) {
+  if (entries.length === 0) return null;
+  return (
+    <ul data-testid="load-provenance-list">
+      {entries.map((entry, index) => (
+        <li key={index}>
+          {entry.kind}: {entry.provenance.label} ({entry.provenance.source})
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export function AnalysisPanel({ snapshot }: AnalysisPanelProps) {
@@ -72,10 +87,14 @@ export function AnalysisPanel({ snapshot }: AnalysisPanelProps) {
             allowableStressMPa: parseOptionalNumber(allowableBearing),
           }
         : undefined;
+    const userEnteredLoadProvenance: LoadProvenance = { source: "user-entered", label: "User-entered uniform load" };
     setMemberReport(
       analyzeMember(snapshot, {
         memberId: selectedMemberId,
-        loads: wNPerMm !== undefined ? [{ kind: "uniform", wNPerMm }] : [],
+        loads:
+          wNPerMm !== undefined
+            ? [{ case: { kind: "uniform", wNPerMm }, kind: "user-defined", provenance: userEnteredLoadProvenance }]
+            : [],
         elasticModulusMPa: parseOptionalNumber(elasticModulus),
         momentOfInertiaMm4: parseOptionalNumber(momentOfInertia),
         bearing,
@@ -97,8 +116,12 @@ export function AnalysisPanel({ snapshot }: AnalysisPanelProps) {
     setPostReport(
       analyzePost(snapshot, {
         postId: selectedPostId,
-        axialLoadN: Number(axialLoad) || 0,
-        endMomentNmm: Number(endMoment) || 0,
+        load: {
+          axialLoadN: Number(axialLoad) || 0,
+          endMomentNmm: Number(endMoment) || 0,
+          kind: "user-defined",
+          provenance: { source: "user-entered", label: "User-entered axial load and end moment" },
+        },
         unbracedLengthMm: parseOptionalNumber(unbracedLength),
         allowableCompressionStressMPa: parseOptionalNumber(allowableCompression),
         allowableBendingStressMPa: parseOptionalNumber(allowableBending),
@@ -107,6 +130,7 @@ export function AnalysisPanel({ snapshot }: AnalysisPanelProps) {
       }),
     );
   }
+
 
   return (
     <section aria-label="Component analysis" className="analysis-panel">
@@ -207,6 +231,17 @@ export function AnalysisPanel({ snapshot }: AnalysisPanelProps) {
             {memberReport.maxDeflectionMm !== undefined && (
               <p>Max deflection: {memberReport.maxDeflectionMm.toFixed(2)} mm</p>
             )}
+            {memberReport.jurisdiction && (
+              <p>
+                Jurisdiction: {memberReport.jurisdiction.provider} ({memberReport.jurisdiction.edition})
+              </p>
+            )}
+            {memberReport.loadProvenance && memberReport.loadProvenance.length > 0 && (
+              <>
+                <p>Load provenance:</p>
+                <LoadProvenanceList entries={memberReport.loadProvenance} />
+              </>
+            )}
             <p role="note">Engineer-review-required before this member is finalized.</p>
           </div>
         )}
@@ -294,6 +329,17 @@ export function AnalysisPanel({ snapshot }: AnalysisPanelProps) {
             )}
             {postReport.footing?.bearingDemandKPa !== undefined && (
               <p>Footing bearing demand: {postReport.footing.bearingDemandKPa.toFixed(2)} kPa</p>
+            )}
+            {postReport.jurisdiction && (
+              <p>
+                Jurisdiction: {postReport.jurisdiction.provider} ({postReport.jurisdiction.edition})
+              </p>
+            )}
+            {postReport.loadProvenance && (
+              <>
+                <p>Load provenance:</p>
+                <LoadProvenanceList entries={[postReport.loadProvenance]} />
+              </>
             )}
             <p role="note">Engineer-review-required before this post/footing is finalized.</p>
           </div>

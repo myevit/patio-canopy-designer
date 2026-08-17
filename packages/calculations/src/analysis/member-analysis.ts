@@ -1,7 +1,8 @@
 import type { Vector3Mm } from "@canopy/shared";
 import { analyzeBeam, type BeamMechanicsResult, type MemberLoadCase } from "./beam-mechanics.js";
 import { checkBearingDemand, type BearingCheckResult } from "./bearing.js";
-import type { JurisdictionMetadata } from "./provenance.js";
+import type { AppliedLoad, AppliedLoadKind } from "./loads.js";
+import type { JurisdictionMetadata, LoadProvenance } from "./provenance.js";
 import { memberAnalysisScope, type MemberAnalysisCondition } from "./scope-guard.js";
 import type { AnalysisSnapshot } from "./snapshot.js";
 import { worstStatus, type AnalysisStatus } from "./status.js";
@@ -12,9 +13,40 @@ export interface MemberAnalysisBearingInput {
   allowableStressMPa?: number;
 }
 
+/**
+ * A single load effect entered into the member analysis: the closed-form
+ * mechanics pattern `analyzeBeam` needs (`case`), plus the category and
+ * `LoadProvenance` it was actually computed/entered from, so the report can
+ * attribute every load effect back to its source.
+ */
+export interface AnalyzedLoad {
+  case: MemberLoadCase;
+  kind: AppliedLoadKind;
+  provenance: LoadProvenance;
+}
+
+export interface AnalyzedLoadProvenance {
+  kind: AppliedLoadKind;
+  provenance: LoadProvenance;
+}
+
+/**
+ * Adapts a distributed `AppliedLoad` (from `computeSelfWeightLoad`,
+ * `computeSurfaceLoad`, or a user-entered uniform load) into the uniform
+ * mechanics case `analyzeMember` consumes, keeping its category and
+ * provenance attached for the report.
+ */
+export function analyzedLoadFromApplied(load: AppliedLoad): AnalyzedLoad {
+  return {
+    case: { kind: "uniform", wNPerMm: load.distributionNPerMm },
+    kind: load.kind,
+    provenance: load.provenance,
+  };
+}
+
 export interface MemberAnalysisInput {
   memberId: string;
-  loads: MemberLoadCase[];
+  loads: AnalyzedLoad[];
   elasticModulusMPa?: number;
   momentOfInertiaMm4?: number;
   bearing?: MemberAnalysisBearingInput;
@@ -27,6 +59,8 @@ export interface MemberAnalysisReport {
   status: AnalysisStatus;
   reason?: string;
   jurisdiction?: JurisdictionMetadata;
+  /** Source category + provenance for every load effect actually analyzed, alongside `jurisdiction`. */
+  loadProvenance?: AnalyzedLoadProvenance[];
   condition?: MemberAnalysisCondition;
   spanMm?: number;
   reactionStartN?: number;
@@ -72,6 +106,10 @@ export function analyzeMember(snapshot: AnalysisSnapshot, input: MemberAnalysisI
   const start = document.anchors.find((a) => a.id === member.startAnchorId)!.positionMm;
   const end = document.anchors.find((a) => a.id === member.endAnchorId)!.positionMm;
   const spanMm = distanceMm(start, end);
+  const loadProvenance: AnalyzedLoadProvenance[] = input.loads.map((load) => ({
+    kind: load.kind,
+    provenance: load.provenance,
+  }));
 
   if (input.loads.length === 0) {
     return {
@@ -79,6 +117,7 @@ export function analyzeMember(snapshot: AnalysisSnapshot, input: MemberAnalysisI
       status: "input-requires-verification",
       reason: "No loads supplied for this member.",
       jurisdiction: input.jurisdiction,
+      loadProvenance,
       condition: scope.condition,
       spanMm,
     };
@@ -88,7 +127,7 @@ export function analyzeMember(snapshot: AnalysisSnapshot, input: MemberAnalysisI
     analyzeBeam({
       support: scope.condition,
       spanMm,
-      load,
+      load: load.case,
       elasticModulusMPa: input.elasticModulusMPa,
       momentOfInertiaMm4: input.momentOfInertiaMm4,
     }),
@@ -101,6 +140,7 @@ export function analyzeMember(snapshot: AnalysisSnapshot, input: MemberAnalysisI
       status: blocking.status,
       reason: blocking.reason,
       jurisdiction: input.jurisdiction,
+      loadProvenance,
       condition: scope.condition,
       spanMm,
     };
@@ -141,6 +181,7 @@ export function analyzeMember(snapshot: AnalysisSnapshot, input: MemberAnalysisI
     memberId: input.memberId,
     status: overallStatus,
     jurisdiction: input.jurisdiction,
+    loadProvenance,
     condition: scope.condition,
     spanMm,
     reactionStartN,

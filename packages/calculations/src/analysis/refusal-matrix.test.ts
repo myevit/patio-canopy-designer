@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { analyzeMember } from "./member-analysis.js";
+import type { MemberLoadCase } from "./beam-mechanics.js";
+import { analyzeMember, type AnalyzedLoad } from "./member-analysis.js";
 import { analyzePost } from "./post-analysis.js";
 import { freezeAnalysisSnapshot } from "./snapshot.js";
 import { twoPostFrame } from "./test-fixtures.js";
+
+function userLoad(load: MemberLoadCase): AnalyzedLoad {
+  return { case: load, kind: "user-defined", provenance: { source: "user-entered", label: "Test load" } };
+}
 
 /**
  * One test per bullet in the delivery plan's "Must refuse" list for
@@ -15,7 +20,7 @@ describe("Milestone 7 refusal matrix", () => {
     const document = twoPostFrame();
     document.members[0]!.role = "fan-rafter";
     const snapshot = freezeAnalysisSnapshot(document, "2026-08-17T00:00:00.000Z");
-    const report = analyzeMember(snapshot, { memberId: "beam-1", loads: [{ kind: "uniform", wNPerMm: 1 }] });
+    const report = analyzeMember(snapshot, { memberId: "beam-1", loads: [userLoad({ kind: "uniform", wNPerMm: 1 })] });
     expect(report.status).toBe("outside-validated-scope");
   });
 
@@ -29,7 +34,7 @@ describe("Milestone 7 refusal matrix", () => {
       engineeringStatus: "engineer-review-required",
     });
     const snapshot = freezeAnalysisSnapshot(document, "2026-08-17T00:00:00.000Z");
-    const report = analyzeMember(snapshot, { memberId: "beam-1", loads: [{ kind: "uniform", wNPerMm: 1 }] });
+    const report = analyzeMember(snapshot, { memberId: "beam-1", loads: [userLoad({ kind: "uniform", wNPerMm: 1 })] });
     expect(report.status).toBe("outside-validated-scope");
   });
 
@@ -37,7 +42,7 @@ describe("Milestone 7 refusal matrix", () => {
     const document = twoPostFrame();
     document.members[0]!.role = "ledger";
     const snapshot = freezeAnalysisSnapshot(document, "2026-08-17T00:00:00.000Z");
-    const report = analyzeMember(snapshot, { memberId: "beam-1", loads: [{ kind: "uniform", wNPerMm: 1 }] });
+    const report = analyzeMember(snapshot, { memberId: "beam-1", loads: [userLoad({ kind: "uniform", wNPerMm: 1 })] });
     expect(report.status).toBe("outside-validated-scope");
   });
 
@@ -52,13 +57,25 @@ describe("Milestone 7 refusal matrix", () => {
       rollRad: 0,
     });
     const snapshot = freezeAnalysisSnapshot(document, "2026-08-17T00:00:00.000Z");
-    const report = analyzePost(snapshot, { postId: "post-a", axialLoadN: 1000, endMomentNmm: 1000, unbracedLengthMm: 2400 });
+    const report = analyzePost(snapshot, {
+      postId: "post-a",
+      load: { axialLoadN: 1000, endMomentNmm: 1000, kind: "user-defined", provenance: { source: "user-entered", label: "Test load" } },
+      unbracedLengthMm: 2400,
+    });
+    expect(report.status).toBe("outside-validated-scope");
+  });
+
+  it("refuses skew/non-coplanar load sharing (strongly-sloped member between unequal-height posts)", () => {
+    const document = twoPostFrame();
+    document.anchors.find((a) => a.id === "anchor-post-b-top")!.positionMm.z = 4400;
+    const snapshot = freezeAnalysisSnapshot(document, "2026-08-17T00:00:00.000Z");
+    const report = analyzeMember(snapshot, { memberId: "beam-1", loads: [] });
     expect(report.status).toBe("outside-validated-scope");
   });
 
   it("refuses an unsupported/arbitrary load position (never approximated as a supported case)", () => {
     const snapshot = freezeAnalysisSnapshot(twoPostFrame(), "2026-08-17T00:00:00.000Z");
-    const report = analyzeMember(snapshot, { memberId: "beam-1", loads: [{ kind: "point-tip", pN: 1000 }] });
+    const report = analyzeMember(snapshot, { memberId: "beam-1", loads: [userLoad({ kind: "point-tip", pN: 1000 })] });
     expect(report.status).toBe("check-not-implemented");
   });
 

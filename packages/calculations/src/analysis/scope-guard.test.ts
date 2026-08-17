@@ -75,6 +75,37 @@ describe("memberAnalysisScope", () => {
     const result = memberAnalysisScope(document, "beam-3");
     expect(result.supported).toBe(false);
   });
+
+  it("refuses a strongly-sloped member between unequal-height posts (skew/non-coplanar)", () => {
+    const document = twoPostFrame();
+    // Same 4000 mm horizontal span as the fixture beam, but the far post-top
+    // is raised 2000 mm: atan2(2000, 4000) ≈ 26.6°, well past the ~5° near-
+    // horizontal tolerance for the through-gravity simple-beam model.
+    document.anchors.find((a) => a.id === "anchor-post-b-top")!.positionMm.z = 4400;
+    const result = memberAnalysisScope(document, "beam-1");
+    expect(result.supported).toBe(false);
+    if (!result.supported) {
+      expect(result.reason).toMatch(/skew|coplanar|inclination|elevation/i);
+    }
+  });
+
+  it("refuses a near-vertical member between a post-top and a free anchor directly above it", () => {
+    const document = twoPostFrame();
+    document.anchors.push({ id: "anchor-free-up", kind: "free", positionMm: { x: 10, y: 0, z: 5000 } });
+    document.members.push({
+      id: "beam-vertical",
+      role: "perimeter-beam",
+      startAnchorId: "anchor-post-a-top",
+      endAnchorId: "anchor-free-up",
+      sectionId: "section-beam",
+      rollRad: 0,
+    });
+    const result = memberAnalysisScope(document, "beam-vertical");
+    expect(result.supported).toBe(false);
+    if (!result.supported) {
+      expect(result.reason).toMatch(/skew|coplanar|inclination|elevation/i);
+    }
+  });
 });
 
 describe("postAnalysisScope", () => {

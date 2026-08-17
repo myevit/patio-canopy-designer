@@ -79,6 +79,9 @@ describe("AnalysisPanel", () => {
     const report = screen.getByTestId("member-analysis-report");
     expect(report).toHaveTextContent(/calculated-within-stated-assumptions/);
     expect(report).toHaveTextContent(/engineer-review-required/i);
+    expect(report).toHaveTextContent(/load provenance/i);
+    expect(report).toHaveTextContent(/user-defined/i);
+    expect(report).toHaveTextContent(/user-entered/i);
   });
 
   it("reports input-requires-verification when a member check is run with no loads", async () => {
@@ -99,6 +102,8 @@ describe("AnalysisPanel", () => {
 
     const report = screen.getByTestId("post-analysis-report");
     expect(report).toHaveTextContent(/input-requires-verification|calculated-within-stated-assumptions/);
+    expect(report).toHaveTextContent(/load provenance/i);
+    expect(report).toHaveTextContent(/user-entered/i);
   });
 
   it("excludes a ledger member from the eligible list and explains why nothing is analyzable", () => {

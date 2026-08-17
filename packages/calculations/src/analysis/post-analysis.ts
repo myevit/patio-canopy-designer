@@ -1,6 +1,7 @@
 import { checkFootingBearingAndUplift, type FootingCheckResult } from "./footing.js";
+import type { AppliedLoadKind } from "./loads.js";
 import { checkPostAxialAndMoment, type PostAxialCheckResult } from "./post-axial.js";
-import type { JurisdictionMetadata } from "./provenance.js";
+import type { JurisdictionMetadata, LoadProvenance } from "./provenance.js";
 import { postAnalysisScope } from "./scope-guard.js";
 import type { AnalysisSnapshot } from "./snapshot.js";
 import { worstStatus, type AnalysisStatus } from "./status.js";
@@ -13,10 +14,22 @@ export interface PostAnalysisFootingInput {
   upliftResistanceN?: number;
 }
 
-export interface PostAnalysisInput {
-  postId: string;
+/**
+ * The axial-load-plus-moment demand applied to a post (typically the beam
+ * reaction transferred through its top anchor), tagged with the category
+ * and `LoadProvenance` it was actually computed/entered from so the report
+ * can attribute it back to its source.
+ */
+export interface PostAppliedLoad {
   axialLoadN: number;
   endMomentNmm: number;
+  kind: AppliedLoadKind;
+  provenance: LoadProvenance;
+}
+
+export interface PostAnalysisInput {
+  postId: string;
+  load: PostAppliedLoad;
   unbracedLengthMm?: number;
   allowableCompressionStressMPa?: number;
   allowableBendingStressMPa?: number;
@@ -30,6 +43,8 @@ export interface PostAnalysisReport {
   status: AnalysisStatus;
   reason?: string;
   jurisdiction?: JurisdictionMetadata;
+  /** Source category + provenance for the applied load actually analyzed, alongside `jurisdiction`. */
+  loadProvenance?: { kind: AppliedLoadKind; provenance: LoadProvenance };
   axial?: PostAxialCheckResult;
   footing?: FootingCheckResult;
 }
@@ -49,10 +64,11 @@ export function analyzePost(snapshot: AnalysisSnapshot, input: PostAnalysisInput
 
   const post = document.posts.find((p) => p.id === input.postId)!;
   const section = document.sections.find((s) => s.id === post.sectionId)!;
+  const loadProvenance = { kind: input.load.kind, provenance: input.load.provenance };
 
   const axial = checkPostAxialAndMoment({
-    axialLoadN: input.axialLoadN,
-    endMomentNmm: input.endMomentNmm,
+    axialLoadN: input.load.axialLoadN,
+    endMomentNmm: input.load.endMomentNmm,
     unbracedLengthMm: input.unbracedLengthMm,
     sectionWidthMm: section.widthMm,
     sectionHeightMm: section.heightMm,
@@ -62,7 +78,7 @@ export function analyzePost(snapshot: AnalysisSnapshot, input: PostAnalysisInput
 
   const footing = input.footing
     ? checkFootingBearingAndUplift({
-        reactionCompressionN: input.axialLoadN,
+        reactionCompressionN: input.load.axialLoadN,
         footingWidthMm: input.footing.widthMm,
         footingLengthMm: input.footing.lengthMm,
         allowableBearingCapacityKPa: input.footing.allowableBearingCapacityKPa,
@@ -75,6 +91,7 @@ export function analyzePost(snapshot: AnalysisSnapshot, input: PostAnalysisInput
     postId: input.postId,
     status: worstStatus([axial.status, footing?.status].filter((s): s is AnalysisStatus => s !== undefined)),
     jurisdiction: input.jurisdiction,
+    loadProvenance,
     axial,
     footing,
   };

@@ -1,4 +1,4 @@
-import type { ProjectDocument } from "@canopy/shared";
+import type { ProjectDocument, Vector3Mm } from "@canopy/shared";
 
 export type MemberAnalysisCondition = "simply-supported" | "cantilever";
 
@@ -8,8 +8,50 @@ export type MemberAnalysisScopeResult =
 
 export type PostAnalysisScopeResult = { supported: true } | { supported: false; reason: string };
 
+/** Documented tolerance: endpoints within this elevation difference are treated as coplanar regardless of span. */
+const ELEVATION_TOLERANCE_MM = 15;
+
+/**
+ * Documented tolerance: beyond this inclination from horizontal, gravity load
+ * no longer acts predominantly transverse to the member axis, so the
+ * through-gravity simple-beam/cantilever model this package implements is no
+ * longer valid. ~5 degrees.
+ */
+const MAX_INCLINATION_RAD = 0.0875;
+
+function anchorById(document: ProjectDocument, anchorId: string) {
+  return document.anchors.find((anchor) => anchor.id === anchorId);
+}
+
 function anchorKind(document: ProjectDocument, anchorId: string) {
-  return document.anchors.find((anchor) => anchor.id === anchorId)?.kind;
+  return anchorById(document, anchorId)?.kind;
+}
+
+/**
+ * Refuses a member whose endpoints are skewed/non-coplanar enough that a
+ * horizontal through-gravity simple-beam or cantilever model would not
+ * apply - e.g. a strongly-sloped span between unequal-height posts, or a
+ * near-vertical member. See the plan's "arbitrary skew / non-coplanar load
+ * sharing" must-refuse item.
+ */
+function coplanarityGuard(start: Vector3Mm, end: Vector3Mm): { ok: true } | { ok: false; reason: string } {
+  const riseMm = Math.abs(end.z - start.z);
+  if (riseMm <= ELEVATION_TOLERANCE_MM) {
+    return { ok: true };
+  }
+  const runMm = Math.hypot(end.x - start.x, end.y - start.y);
+  const inclinationRad = Math.atan2(riseMm, runMm);
+  if (inclinationRad <= MAX_INCLINATION_RAD) {
+    return { ok: true };
+  }
+  const inclinationDeg = (inclinationRad * 180) / Math.PI;
+  return {
+    ok: false,
+    reason:
+      `Member endpoints differ in elevation by ${riseMm.toFixed(0)} mm over a ${runMm.toFixed(0)} mm run ` +
+      `(${inclinationDeg.toFixed(1)} deg from horizontal), beyond the documented near-horizontal/coplanar ` +
+      "tolerance; a skewed or non-coplanar member is outside the validated through-gravity beam model.",
+  };
 }
 
 /**
@@ -47,14 +89,24 @@ export function memberAnalysisScope(document: ProjectDocument, memberId: string)
     };
   }
 
-  const startKind = anchorKind(document, member.startAnchorId);
-  const endKind = anchorKind(document, member.endAnchorId);
+  const startAnchor = anchorById(document, member.startAnchorId);
+  const endAnchor = anchorById(document, member.endAnchorId);
+  const startKind = startAnchor?.kind;
+  const endKind = endAnchor?.kind;
 
-  if (startKind === "post-top" && endKind === "post-top") {
-    return { supported: true, condition: "simply-supported" };
-  }
-  if ((startKind === "post-top" && endKind === "free") || (startKind === "free" && endKind === "post-top")) {
-    return { supported: true, condition: "cantilever" };
+  if (
+    (startKind === "post-top" && endKind === "post-top") ||
+    (startKind === "post-top" && endKind === "free") ||
+    (startKind === "free" && endKind === "post-top")
+  ) {
+    const coplanarity = coplanarityGuard(startAnchor!.positionMm, endAnchor!.positionMm);
+    if (!coplanarity.ok) {
+      return { supported: false, reason: coplanarity.reason };
+    }
+    return {
+      supported: true,
+      condition: startKind === "post-top" && endKind === "post-top" ? "simply-supported" : "cantilever",
+    };
   }
   return {
     supported: false,
