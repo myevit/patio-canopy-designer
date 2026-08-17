@@ -4,6 +4,7 @@ import {
   formatLengthMm,
   formatNominalLumberSize,
   formatPitch,
+  formatSectionLabel,
   parseLengthMm,
   parsePitch,
   type CrossingBehavior,
@@ -274,7 +275,7 @@ function SectionField({ sections, sectionId, onCommit }: SectionFieldProps) {
       <select id={id} value={sectionId} onChange={(event) => onCommit(event.target.value)}>
         {sections.map((section) => (
           <option key={section.id} value={section.id}>
-            {section.name}
+            {formatSectionLabel(section.name, section.widthMm, section.heightMm)}
           </option>
         ))}
       </select>

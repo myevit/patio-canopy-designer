@@ -1,5 +1,9 @@
 import type { MemberSchedule } from "@canopy/geometry";
-import { formatLengthMm, type DisplayLengthUnit, type Material, type Section } from "@canopy/shared";
+import { formatLengthMm, formatSectionLabel, type DisplayLengthUnit, type Material, type Section } from "@canopy/shared";
+
+function sectionLabel(section: Section | undefined, sectionId: string): string {
+  return section ? formatSectionLabel(section.name, section.widthMm, section.heightMm) : sectionId;
+}
 
 export interface BomPanelProps {
   schedule: MemberSchedule;
@@ -60,7 +64,7 @@ export function BomPanel({
           <tbody>
             {schedule.rows.map((row) => (
               <tr key={row.key} data-testid={`bom-row-${row.key}`}>
-                <td>{sectionsById.get(row.sectionId)?.name ?? row.sectionId}</td>
+                <td>{sectionLabel(sectionsById.get(row.sectionId), row.sectionId)}</td>
                 <td>{row.materialId ? materialsById.get(row.materialId)?.name ?? row.materialId : "-"}</td>
                 <td>{row.quantity}</td>
                 <td>{formatLengthMm(row.finishedLengthMm, displayUnits)}</td>

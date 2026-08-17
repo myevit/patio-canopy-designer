@@ -85,6 +85,16 @@ describe("PlanView", () => {
     expect(screen.getByTestId("patio-outline-patio-1")).toBeInTheDocument();
   });
 
+  it("draws a post as a rectangle matching its actual cross-section, not a circle", () => {
+    render(<PlanView scene={scene()} selectedObjectId={null} onSelect={() => {}} />);
+    const post = screen.getByTestId("scene-object-post-1");
+    expect(post.tagName.toLowerCase()).toBe("rect");
+    expect(post).toHaveAttribute("width", "140");
+    expect(post).toHaveAttribute("height", "140");
+    expect(post).toHaveAttribute("x", "-20");
+    expect(post).toHaveAttribute("y", "330");
+  });
+
   it("calls onSelect with the post id when the post is clicked", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();

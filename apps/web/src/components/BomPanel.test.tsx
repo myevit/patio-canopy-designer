@@ -40,7 +40,7 @@ describe("BomPanel", () => {
         onPrint={() => {}}
       />,
     );
-    expect(screen.getByText("89x38 Rafter")).toBeInTheDocument();
+    expect(screen.getByText("2x4 Rafter")).toBeInTheDocument();
     expect(screen.getByText("Cedar")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
   });

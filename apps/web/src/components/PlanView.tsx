@@ -140,7 +140,7 @@ export function PlanView({
     return points.map((p, i) => (i === dragPreview.vertex.index ? dragPreview.position : p));
   }
 
-  function handlePostPointerDown(event: ReactPointerEvent<SVGCircleElement>, postId: string, base: Vector3Mm) {
+  function handlePostPointerDown(event: ReactPointerEvent<SVGRectElement>, postId: string, base: Vector3Mm) {
     if (tool !== "select") return;
     event.stopPropagation();
     try {
@@ -151,12 +151,12 @@ export function PlanView({
     setPostDragPreview({ postId, position: base });
   }
 
-  function handlePostPointerMove(event: ReactPointerEvent<SVGCircleElement>, postId: string) {
+  function handlePostPointerMove(event: ReactPointerEvent<SVGRectElement>, postId: string) {
     if (!postDragPreview || postDragPreview.postId !== postId) return;
     setPostDragPreview({ postId, position: worldPointFromEvent(event) });
   }
 
-  function handlePostPointerUp(event: ReactPointerEvent<SVGCircleElement>, postId: string) {
+  function handlePostPointerUp(event: ReactPointerEvent<SVGRectElement>, postId: string) {
     if (!postDragPreview || postDragPreview.postId !== postId) return;
     onMovePost(postId, worldPointFromEvent(event));
     setPostDragPreview(null);
@@ -409,14 +409,15 @@ export function PlanView({
         const displayedBase =
           postDragPreview?.postId === post.id ? postDragPreview.position : post.base;
         return (
-          <circle
+          <rect
             key={post.id}
             data-testid={`scene-object-${post.id}`}
             data-selected={post.id === selectedObjectId}
             className={post.id === selectedObjectId ? "plan-view__post plan-view__post--selected" : "plan-view__post"}
-            cx={displayedBase.x}
-            cy={displayedBase.y}
-            r={Math.max(post.widthMm, post.depthMm) / 2}
+            x={displayedBase.x - post.widthMm / 2}
+            y={displayedBase.y - post.depthMm / 2}
+            width={post.widthMm}
+            height={post.depthMm}
             tabIndex={0}
             role="button"
             aria-label={`Post ${post.id}`}

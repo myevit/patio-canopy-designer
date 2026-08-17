@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { SceneJointCandidate, SceneObject, SceneRoofPlane } from "@canopy/geometry";
 import type { FanField } from "@canopy/shared";
 import { createFanDraft } from "../state/fan-draft.js";
@@ -98,6 +98,15 @@ describe("Inspector post editing", () => {
   it("shows the post's cross-section as a North American nominal lumber size", () => {
     render(<Inspector selected={post} sections={sections} />);
     expect(screen.getByText("6x6")).toBeInTheDocument();
+  });
+
+  it("shows nominal lumber sizes in the section dropdown options, not raw millimetres", () => {
+    render(<Inspector selected={post} sections={sections} />);
+    const select = screen.getByLabelText(/^section$/i);
+    expect(within(select).getByText("6x6 post")).toBeInTheDocument();
+    expect(within(select).getByText("4x4 post")).toBeInTheDocument();
+    expect(within(select).queryByText(/140x140/)).not.toBeInTheDocument();
+    expect(within(select).queryByText(/90x90/)).not.toBeInTheDocument();
   });
 
   it("falls back to raw millimetre dimensions when no standard nominal size matches", () => {

@@ -49,3 +49,23 @@ export function formatNominalLumberSize(widthMm: number, heightMm: number): stri
   }
   return null;
 }
+
+/**
+ * Rewrites a section name's leading raw-millimetre dimension (e.g. `"140x140
+ * post"`) to its North American nominal size (`"6x6 post"`), when the name
+ * literally encodes the same width/height this section was given. Leaves the
+ * name untouched otherwise — a custom or already-descriptive name (or
+ * dimensions with no standard nominal match) is never guessed at or rewritten.
+ */
+export function formatSectionLabel(name: string, widthMm: number, heightMm: number): string {
+  const nominal = formatNominalLumberSize(widthMm, heightMm);
+  if (nominal === null) return name;
+
+  const rawPrefixes = [`${widthMm}x${heightMm}`, `${heightMm}x${widthMm}`];
+  for (const prefix of rawPrefixes) {
+    if (name.startsWith(prefix)) {
+      return nominal + name.slice(prefix.length);
+    }
+  }
+  return name;
+}

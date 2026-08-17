@@ -269,8 +269,8 @@ describe("App: posts and beams", () => {
 
     const after = screen.getAllByTestId(/^scene-object-post-/);
     expect(after.length).toBe(before + 1);
-    expect(after.at(-1)!).toHaveAttribute("cx", "2000");
-    expect(after.at(-1)!).toHaveAttribute("cy", "2000");
+    expect(after.at(-1)!).toHaveAttribute("x", "1930");
+    expect(after.at(-1)!).toHaveAttribute("y", "1930");
   });
 
   it("places a post entirely via the keyboard-operable coordinate-entry panel in the Inspector", async () => {
@@ -287,8 +287,8 @@ describe("App: posts and beams", () => {
 
     const after = screen.getAllByTestId(/^scene-object-post-/);
     expect(after.length).toBe(before + 1);
-    expect(after.at(-1)!).toHaveAttribute("cx", "2000");
-    expect(after.at(-1)!).toHaveAttribute("cy", "3000");
+    expect(after.at(-1)!).toHaveAttribute("x", "1930");
+    expect(after.at(-1)!).toHaveAttribute("y", "2930");
   });
 
   it("connects two keyboard-placed posts with a beam using only Tab/Enter, no pointer", async () => {
@@ -362,7 +362,7 @@ describe("App: posts and beams", () => {
     fireEvent.change(xField, { target: { value: "2500" } });
     fireEvent.blur(xField);
 
-    expect(postA).toHaveAttribute("cx", "2500");
+    expect(postA).toHaveAttribute("x", "2430");
     expect(beam).toHaveAttribute("x1", "2500");
   });
 
