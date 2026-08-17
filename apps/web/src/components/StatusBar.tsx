@@ -11,6 +11,9 @@ function describeInteraction(interaction: InteractionState): string {
   if (interaction.status === "dragging") {
     return `Dragging ${interaction.objectId}`;
   }
+  if (interaction.status === "drawing-house-outline" && interaction.error) {
+    return `${interaction.status}: ${interaction.error}`;
+  }
   return interaction.status;
 }
 

@@ -20,6 +20,8 @@ function labelFor(object: SceneObject): string {
       return `${MEMBER_ROLE_LABELS[object.role] ?? "Member"} ${object.id}`;
     case "joint":
       return `Joint ${object.id}`;
+    case "house-outline":
+      return `House outline ${object.id}`;
   }
 }
 
@@ -38,6 +40,7 @@ export function findSceneObject(
   return (
     scene.posts.find((post) => post.id === id) ??
     scene.members.find((member) => member.id === id) ??
-    scene.joints.find((joint) => joint.id === id)
+    scene.joints.find((joint) => joint.id === id) ??
+    scene.houseOutlines.find((outline) => outline.id === id)
   );
 }

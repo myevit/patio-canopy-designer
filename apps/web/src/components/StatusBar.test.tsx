@@ -26,4 +26,14 @@ describe("StatusBar", () => {
     );
     expect(screen.getByText(/no anchor at that point/i)).toBeInTheDocument();
   });
+
+  it("shows a recoverable error while drawing a house outline", () => {
+    render(
+      <StatusBar
+        tool="house"
+        interaction={{ status: "drawing-house-outline", points: [], error: "The outline encloses zero area." }}
+      />,
+    );
+    expect(screen.getByText(/the outline encloses zero area/i)).toBeInTheDocument();
+  });
 });

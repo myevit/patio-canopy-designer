@@ -122,6 +122,70 @@ describe("parseProjectDocument", () => {
     expect(result.success).toBe(false);
   });
 
+  it("rejects a roof plane referencing a house outline id that does not exist", () => {
+    const doc = minimalDocument();
+    doc.site.roofPlanes.push({
+      id: "roof-1",
+      houseOutlineId: "house-missing",
+      referenceElevationMm: 2690,
+      pitchDeg: 10,
+      directionRad: 0,
+      gutter: { widthMm: 100, dropMm: 50 },
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a roof plane pitch of 90 degrees or more", () => {
+    const doc = minimalDocument();
+    doc.site.houseOutlines.push({
+      id: "house-1",
+      points: [
+        { x: 0, y: 0, z: 0 },
+        { x: 4000, y: 0, z: 0 },
+        { x: 4000, y: 3000, z: 0 },
+        { x: 0, y: 3000, z: 0 },
+      ],
+    });
+    doc.site.roofPlanes.push({
+      id: "roof-1",
+      houseOutlineId: "house-1",
+      referenceElevationMm: 2690,
+      pitchDeg: 90,
+      directionRad: 0,
+      gutter: { widthMm: 100, dropMm: 50 },
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts a roof plane with an exact 2690 mm reference elevation attached to a house outline", () => {
+    const doc = minimalDocument();
+    doc.site.houseOutlines.push({
+      id: "house-1",
+      points: [
+        { x: 0, y: 0, z: 0 },
+        { x: 4000, y: 0, z: 0 },
+        { x: 4000, y: 3000, z: 0 },
+        { x: 0, y: 3000, z: 0 },
+      ],
+    });
+    doc.site.roofPlanes.push({
+      id: "roof-1",
+      houseOutlineId: "house-1",
+      referenceElevationMm: 2690,
+      pitchDeg: 12,
+      directionRad: 0,
+      gutter: { widthMm: 100, dropMm: 50 },
+    });
+    const result = parseProjectDocument(doc);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const [roofPlane] = result.data.site.roofPlanes;
+      expect(roofPlane!.referenceElevationMm).toBe(2690);
+    }
+  });
+
   it("accepts a document with a fully cross-referenced post", () => {
     const doc = minimalDocument();
     doc.sections.push({ id: "sec-post", name: "Post section", widthMm: 140, heightMm: 140 });

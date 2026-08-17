@@ -31,3 +31,23 @@ export function memberTransform(start: Vector3Mm, end: Vector3Mm): MemberTransfo
     length,
   };
 }
+
+export interface WallTransform {
+  center: [number, number, number];
+  rotationY: number;
+  length: number;
+}
+
+/** A wall is a vertical panel from ground level up to heightMm along a house outline edge. */
+export function wallTransform(start: Vector3Mm, end: Vector3Mm, heightMm: number): WallTransform {
+  const [sx, , sz] = toThreeVector(start);
+  const [ex, , ez] = toThreeVector(end);
+  const dx = ex - sx;
+  const dz = ez - sz;
+  const length = Math.hypot(dx, dz);
+  return {
+    center: [(sx + ex) / 2, heightMm / 2, (sz + ez) / 2],
+    rotationY: Math.atan2(dx, dz),
+    length,
+  };
+}

@@ -24,7 +24,29 @@ const { ThreeView } = await import("./ThreeView.js");
 function scene(): ScenePrimitives {
   return {
     houseOutlines: [],
-    roofPlanes: [],
+    roofPlanes: [
+      {
+        id: "roof-1",
+        kind: "roof-plane",
+        houseOutlineId: "house-1",
+        referenceElevationMm: 2700,
+        pitchDeg: 10,
+        directionRad: 0,
+        outline: [
+          { x: 0, y: 0, z: 2700 },
+          { x: 4000, y: 0, z: 2400 },
+          { x: 4000, y: 3000, z: 2400 },
+          { x: 0, y: 3000, z: 2700 },
+        ],
+        gutter: {
+          start: { x: 4000, y: 0, z: 2400 },
+          end: { x: 4000, y: 3000, z: 2400 },
+          widthMm: 100,
+          dropMm: 50,
+        },
+      },
+    ],
+    walls: [{ id: "house-1-wall-0", kind: "wall", start: { x: 0, y: 0, z: 0 }, end: { x: 4000, y: 0, z: 0 }, heightMm: 2700 }],
     patioOutlines: [],
     posts: [
       { id: "post-1", kind: "post", base: { x: 0, y: 0, z: 0 }, top: { x: 0, y: 0, z: 2400 }, widthMm: 140, depthMm: 140 },
@@ -53,6 +75,12 @@ describe("ThreeView", () => {
     expect(screen.getByTestId("scene-object-post-1")).toBeInTheDocument();
     expect(screen.getByTestId("scene-object-member-1")).toBeInTheDocument();
     expect(screen.getByTestId("scene-object-joint-1")).toBeInTheDocument();
+  });
+
+  it("renders a wall panel and a roof plane mesh", () => {
+    render(<ThreeView scene={scene()} selectedObjectId={null} onSelect={() => {}} />);
+    expect(screen.getByTestId("scene-wall-house-1-wall-0")).toBeInTheDocument();
+    expect(screen.getByTestId("scene-roof-plane-roof-1")).toBeInTheDocument();
   });
 
   it("calls onSelect with the member id when the member mesh is clicked", async () => {

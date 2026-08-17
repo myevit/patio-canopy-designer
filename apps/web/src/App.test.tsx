@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ScenePrimitives } from "@canopy/geometry";
+import type { ProjectDocument } from "@canopy/shared";
+import { exportProjectDocument } from "@canopy/shared";
+import type { PersistenceAdapter } from "./persistence/persistence-adapter.js";
 
 vi.mock("./components/ThreeView.js", () => ({
   ThreeView: ({
@@ -31,9 +34,28 @@ vi.mock("./components/ThreeView.js", () => ({
 
 const { App } = await import("./App.js");
 
+function createFakeAdapter(initial?: ProjectDocument): PersistenceAdapter {
+  let stored = initial;
+  return {
+    async load() {
+      return stored;
+    },
+    async save(document) {
+      stored = document;
+    },
+    async clear() {
+      stored = undefined;
+    },
+  };
+}
+
+function renderApp() {
+  return render(<App persistenceAdapter={createFakeAdapter()} />);
+}
+
 describe("App", () => {
   it("renders the toolbar, view switcher, inspector, status bar, and drawer", () => {
-    render(<App />);
+    renderApp();
     expect(screen.getByRole("toolbar", { name: "Drawing tools" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "View mode" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Inspector" })).toBeInTheDocument();
@@ -43,14 +65,14 @@ describe("App", () => {
   });
 
   it("starts in Plan view showing the sample project's posts", () => {
-    render(<App />);
+    renderApp();
     expect(screen.getByTestId("plan-view-svg")).toBeInTheDocument();
     expect(screen.getByTestId("scene-object-post-1")).toBeInTheDocument();
   });
 
   it("selecting a post in Plan view highlights it and updates the inspector", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
     await user.click(screen.getByTestId("scene-object-post-1"));
     expect(screen.getByTestId("scene-object-post-1")).toHaveAttribute("data-selected", "true");
     expect(screen.getByText("post-1")).toBeInTheDocument();
@@ -58,7 +80,7 @@ describe("App", () => {
 
   it("switching to Split view renders both the plan and 3D views with the same selection", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
     await user.click(screen.getByTestId("scene-object-post-1"));
     await user.click(screen.getByRole("button", { name: "Split" }));
     expect(screen.getByTestId("plan-view-svg")).toBeInTheDocument();
@@ -71,7 +93,7 @@ describe("App", () => {
 
   it("selecting the same member id in the 3D view updates the shared selection", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
     await user.click(screen.getByRole("button", { name: "3D" }));
     await user.click(screen.getByTestId("scene-object-member-ledger"));
     expect(
@@ -81,10 +103,139 @@ describe("App", () => {
 
   it("pressing Escape returns to the Select tool", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
     await user.click(screen.getByRole("button", { name: "Post" }));
     expect(screen.getByRole("button", { name: "Post" })).toHaveAttribute("aria-pressed", "true");
     await user.keyboard("{Escape}");
     expect(screen.getByRole("button", { name: "Select" })).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+describe("App: house outline authoring", () => {
+  function mockRect() {
+    const rect = { left: 0, top: 0, width: 8400, height: 5200 };
+    vi.spyOn(SVGElement.prototype, "getBoundingClientRect").mockReturnValue({
+      ...rect,
+      right: rect.width,
+      bottom: rect.height,
+      x: 0,
+      y: 0,
+      toJSON: () => rect,
+    } as DOMRect);
+  }
+
+  it("draws a closed house outline and adds a roof plane to it", async () => {
+    mockRect();
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "House" }));
+    const svg = screen.getByTestId("plan-view-svg");
+    fireEvent.click(svg, { clientX: 600, clientY: 400 });
+    fireEvent.click(svg, { clientX: 1600, clientY: 400 });
+    fireEvent.click(svg, { clientX: 1600, clientY: 1400 });
+
+    const closeAffordance = screen.getByTestId("house-outline-close-affordance");
+    fireEvent.click(closeAffordance);
+
+    expect(screen.getByRole("button", { name: "Select" })).toHaveAttribute("aria-pressed", "true");
+    const outlines = screen.getAllByLabelText(/^House outline/);
+    expect(outlines.length).toBeGreaterThanOrEqual(1);
+
+    const newOutline = outlines.at(-1)!;
+    fireEvent.click(newOutline);
+    await user.click(screen.getByRole("button", { name: /add roof plane/i }));
+
+    expect(screen.getByLabelText(/reference elevation/i)).toBeInTheDocument();
+  });
+
+  it("rejects a zero-area outline with a recoverable message and keeps the in-progress points", async () => {
+    mockRect();
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "House" }));
+    const svg = screen.getByTestId("plan-view-svg");
+    fireEvent.click(svg, { clientX: 600, clientY: 400 });
+    fireEvent.click(svg, { clientX: 1600, clientY: 400 });
+    fireEvent.click(svg, { clientX: 2600, clientY: 400 });
+
+    fireEvent.click(screen.getByTestId("house-outline-close-affordance"));
+
+    expect(screen.getByRole("status")).toHaveTextContent(/zero area/i);
+    expect(screen.getByTestId("house-drawing-point-1")).toBeInTheDocument();
+  });
+});
+
+describe("App: undo/redo and project menu", () => {
+  function mockRect() {
+    const rect = { left: 0, top: 0, width: 8400, height: 5200 };
+    vi.spyOn(SVGElement.prototype, "getBoundingClientRect").mockReturnValue({
+      ...rect,
+      right: rect.width,
+      bottom: rect.height,
+      x: 0,
+      y: 0,
+      toJSON: () => rect,
+    } as DOMRect);
+  }
+
+  it("undoes and redoes a completed house outline", async () => {
+    mockRect();
+    const user = userEvent.setup();
+    renderApp();
+    const before = screen.getAllByLabelText(/^House outline/).length;
+
+    await user.click(screen.getByRole("button", { name: "House" }));
+    const svg = screen.getByTestId("plan-view-svg");
+    fireEvent.click(svg, { clientX: 600, clientY: 400 });
+    fireEvent.click(svg, { clientX: 1600, clientY: 400 });
+    fireEvent.click(svg, { clientX: 1600, clientY: 1400 });
+    fireEvent.click(screen.getByTestId("house-outline-close-affordance"));
+
+    expect(screen.getAllByLabelText(/^House outline/).length).toBe(before + 1);
+    expect(screen.getByRole("button", { name: /undo/i })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: /undo/i }));
+    expect(screen.getAllByLabelText(/^House outline/).length).toBe(before);
+
+    await user.click(screen.getByRole("button", { name: /redo/i }));
+    expect(screen.getAllByLabelText(/^House outline/).length).toBe(before + 1);
+  });
+
+  it("New clears the project back to an empty document", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    expect(screen.getByTestId("scene-object-post-1")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "New" }));
+    expect(screen.queryByTestId("scene-object-post-1")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /undo/i })).toBeDisabled();
+  });
+
+  it("Export triggers a JSON download of the current project", async () => {
+    const user = userEvent.setup();
+    URL.createObjectURL = vi.fn(() => "blob:mock");
+    URL.revokeObjectURL = vi.fn();
+
+    renderApp();
+    await user.click(screen.getByRole("button", { name: "Export" }));
+
+    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+  });
+
+  it("Import replaces the current project with the uploaded document", async () => {
+    renderApp();
+    const { createEmptyProjectDocument } = await import("@canopy/shared");
+    const imported = exportProjectDocument(
+      createEmptyProjectDocument({ name: "Imported project", createdAt: "2026-08-16T00:00:00.000Z" }),
+    );
+    const file = new File([imported], "project.json", { type: "application/json" });
+    const input = screen.getByLabelText(/import/i) as HTMLInputElement;
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await screen.findByText(/no selection/i);
+    expect(screen.queryByTestId("scene-object-post-1")).not.toBeInTheDocument();
   });
 });

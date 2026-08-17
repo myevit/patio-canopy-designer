@@ -6,10 +6,30 @@ export interface SceneHouseOutline {
   points: Vector3Mm[];
 }
 
+export interface SceneRoofGutter {
+  start: Vector3Mm;
+  end: Vector3Mm;
+  widthMm: number;
+  dropMm: number;
+}
+
 export interface SceneRoofPlane {
   id: string;
   kind: "roof-plane";
+  houseOutlineId: string;
+  referenceElevationMm: number;
+  pitchDeg: number;
+  directionRad: number;
   outline: Vector3Mm[];
+  gutter: SceneRoofGutter;
+}
+
+export interface SceneWall {
+  id: string;
+  kind: "wall";
+  start: Vector3Mm;
+  end: Vector3Mm;
+  heightMm: number;
 }
 
 export interface ScenePatioOutline {
@@ -47,10 +67,11 @@ export interface SceneJoint {
 export interface ScenePrimitives {
   houseOutlines: SceneHouseOutline[];
   roofPlanes: SceneRoofPlane[];
+  walls: SceneWall[];
   patioOutlines: ScenePatioOutline[];
   posts: ScenePost[];
   members: SceneMember[];
   joints: SceneJoint[];
 }
 
-export type SceneObject = ScenePost | SceneMember | SceneJoint;
+export type SceneObject = ScenePost | SceneMember | SceneJoint | SceneHouseOutline;

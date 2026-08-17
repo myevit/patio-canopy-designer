@@ -6,6 +6,7 @@ function scene(): ScenePrimitives {
   return {
     houseOutlines: [],
     roofPlanes: [],
+    walls: [],
     patioOutlines: [],
     posts: [
       { id: "post-1", kind: "post", base: { x: 0, y: 0, z: 0 }, top: { x: 0, y: 0, z: 2400 }, widthMm: 140, depthMm: 140 },
@@ -57,5 +58,13 @@ describe("findSceneObject", () => {
 
   it("returns undefined for a null id", () => {
     expect(findSceneObject(scene(), null)).toBeUndefined();
+  });
+
+  it("finds a house outline by id", () => {
+    const withHouse: ScenePrimitives = {
+      ...scene(),
+      houseOutlines: [{ id: "house-1", kind: "house-outline", points: [{ x: 0, y: 0, z: 0 }] }],
+    };
+    expect(findSceneObject(withHouse, "house-1")?.kind).toBe("house-outline");
   });
 });

@@ -30,15 +30,11 @@ const document: ProjectDocument = {
     roofPlanes: [
       {
         id: "roof-plane-1",
-        pointMm: { x: 0, y: 0, z: 2700 },
-        normal: { x: 0, y: -0.08, z: 0.9968 },
-        outline: [
-          { x: 0, y: 0, z: 2700 },
-          { x: 7000, y: 0, z: 2700 },
-          { x: 7300, y: 4300, z: 2350 },
-          { x: -300, y: 4300, z: 2350 },
-        ],
-        pitchLabel: "~8% eave-to-fascia slope",
+        houseOutlineId: "house-outline-1",
+        referenceElevationMm: 2700,
+        pitchDeg: 5,
+        directionRad: Math.PI / 2,
+        gutter: { widthMm: 125, dropMm: 60 },
       },
     ],
     patioOutlines: [

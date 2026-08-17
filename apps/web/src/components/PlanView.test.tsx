@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ScenePrimitives } from "@canopy/geometry";
 import { PlanView } from "./PlanView.js";
@@ -18,6 +18,7 @@ function scene(): ScenePrimitives {
       },
     ],
     roofPlanes: [],
+    walls: [],
     patioOutlines: [
       {
         id: "patio-1",
@@ -104,5 +105,166 @@ describe("PlanView", () => {
     render(<PlanView scene={scene()} selectedObjectId="post-1" onSelect={() => {}} />);
     expect(screen.getByTestId("scene-object-post-1")).toHaveAttribute("data-selected", "true");
     expect(screen.getByTestId("scene-object-member-1")).toHaveAttribute("data-selected", "false");
+  });
+
+  it("selects a house outline when its body is clicked", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<PlanView scene={scene()} selectedObjectId={null} onSelect={onSelect} />);
+    await user.click(screen.getByTestId("house-outline-house-1"));
+    expect(onSelect).toHaveBeenCalledWith("house-1");
+  });
+});
+
+describe("PlanView house drawing", () => {
+  function mockRect() {
+    const rect = { left: 0, top: 0, width: 8400, height: 5200 };
+    vi.spyOn(SVGElement.prototype, "getBoundingClientRect").mockReturnValue({
+      ...rect,
+      right: rect.width,
+      bottom: rect.height,
+      x: 0,
+      y: 0,
+      toJSON: () => rect,
+    });
+  }
+
+  it("adds a drawing point at the clicked world position when the house tool is active", async () => {
+    mockRect();
+    const onAddDrawingPoint = vi.fn();
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="house"
+        drawingPoints={[]}
+        onAddDrawingPoint={onAddDrawingPoint}
+      />,
+    );
+    const svg = screen.getByTestId("plan-view-svg");
+    fireEvent.click(svg, { clientX: 600, clientY: 400 });
+    expect(onAddDrawingPoint).toHaveBeenCalledWith({ x: 0, y: 0, z: 0 });
+  });
+
+  it("does not add a drawing point when clicking an existing scene object", async () => {
+    mockRect();
+    const onAddDrawingPoint = vi.fn();
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="house"
+        drawingPoints={[]}
+        onAddDrawingPoint={onAddDrawingPoint}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("scene-object-post-1"), { clientX: 650, clientY: 1000 });
+    expect(onAddDrawingPoint).not.toHaveBeenCalled();
+  });
+
+  it("renders a close affordance once at least three points are drawn, and closes on click", () => {
+    mockRect();
+    const onCloseDrawing = vi.fn();
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="house"
+        drawingPoints={[
+          { x: 0, y: 0, z: 0 },
+          { x: 1000, y: 0, z: 0 },
+          { x: 1000, y: 1000, z: 0 },
+        ]}
+        onCloseDrawing={onCloseDrawing}
+      />,
+    );
+    const closeAffordance = screen.getByTestId("house-outline-close-affordance");
+    fireEvent.click(closeAffordance, { clientX: 600, clientY: 400 });
+    expect(onCloseDrawing).toHaveBeenCalled();
+  });
+
+  it("does not render a close affordance with fewer than three points", () => {
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        tool="house"
+        drawingPoints={[{ x: 0, y: 0, z: 0 }]}
+      />,
+    );
+    expect(screen.queryByTestId("house-outline-close-affordance")).not.toBeInTheDocument();
+  });
+});
+
+describe("PlanView vertex editing", () => {
+  function mockRect() {
+    const rect = { left: 0, top: 0, width: 8400, height: 5200 };
+    vi.spyOn(SVGElement.prototype, "getBoundingClientRect").mockReturnValue({
+      ...rect,
+      right: rect.width,
+      bottom: rect.height,
+      x: 0,
+      y: 0,
+      toJSON: () => rect,
+    });
+  }
+
+  it("renders a vertex marker per house outline point and selects it on click", async () => {
+    mockRect();
+    const onSelectVertex = vi.fn();
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        onSelectVertex={onSelectVertex}
+      />,
+    );
+    const vertex = screen.getByTestId("house-vertex-house-1-0");
+    fireEvent.click(vertex, { clientX: 600, clientY: 400 });
+    expect(onSelectVertex).toHaveBeenCalledWith({ outlineId: "house-1", index: 0 });
+  });
+
+  it("drags a vertex and commits the move on pointer up", () => {
+    mockRect();
+    const onMoveVertex = vi.fn();
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId={null}
+        onSelect={() => {}}
+        onMoveVertex={onMoveVertex}
+      />,
+    );
+    const vertex = screen.getByTestId("house-vertex-house-1-0");
+    fireEvent.pointerDown(vertex, { clientX: 600, clientY: 400, pointerId: 1 });
+    fireEvent.pointerMove(vertex, { clientX: 700, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(vertex, { clientX: 700, clientY: 500, pointerId: 1 });
+    expect(onMoveVertex).toHaveBeenCalledWith({ outlineId: "house-1", index: 0 }, { x: 100, y: 100, z: 0 });
+  });
+
+  it("renders a midpoint marker for each edge of the selected outline and inserts a vertex on click", () => {
+    mockRect();
+    const onInsertVertex = vi.fn();
+    render(
+      <PlanView
+        scene={scene()}
+        selectedObjectId="house-1"
+        onSelect={() => {}}
+        onInsertVertex={onInsertVertex}
+      />,
+    );
+    const midpoint = screen.getByTestId("house-midpoint-house-1-0");
+    fireEvent.click(midpoint, { clientX: 600, clientY: 400 });
+    expect(onInsertVertex).toHaveBeenCalledWith("house-1", 0, { x: 50, y: -300, z: 0 });
+  });
+
+  it("does not render midpoint markers when the outline is not selected", () => {
+    render(<PlanView scene={scene()} selectedObjectId={null} onSelect={() => {}} />);
+    expect(screen.queryByTestId("house-midpoint-house-1-0")).not.toBeInTheDocument();
   });
 });

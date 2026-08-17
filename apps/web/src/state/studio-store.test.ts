@@ -70,3 +70,97 @@ describe("studioReducer", () => {
     expect(closed.drawerOpen).toBe(false);
   });
 });
+
+describe("studioReducer: house outline drawing", () => {
+  it("switches to the House tool and enters an empty drawing-house-outline interaction", () => {
+    const next = studioReducer(initialStudioState, { type: "select-tool", tool: "house" });
+    expect(next.interaction).toEqual({ status: "drawing-house-outline", points: [] });
+  });
+
+  it("adds a point to the in-progress outline", () => {
+    const drawing = studioReducer(initialStudioState, { type: "select-tool", tool: "house" });
+    const next = studioReducer(drawing, { type: "add-outline-point", point: { x: 100, y: 200, z: 0 } });
+    expect(next.interaction).toEqual({
+      status: "drawing-house-outline",
+      points: [{ x: 100, y: 200, z: 0 }],
+    });
+  });
+
+  it("ignores add-outline-point when not drawing a house outline", () => {
+    const next = studioReducer(initialStudioState, { type: "add-outline-point", point: { x: 0, y: 0, z: 0 } });
+    expect(next).toEqual(initialStudioState);
+  });
+
+  it("removes the last drawn point", () => {
+    let state = studioReducer(initialStudioState, { type: "select-tool", tool: "house" });
+    state = studioReducer(state, { type: "add-outline-point", point: { x: 0, y: 0, z: 0 } });
+    state = studioReducer(state, { type: "add-outline-point", point: { x: 100, y: 0, z: 0 } });
+    const next = studioReducer(state, { type: "remove-last-outline-point" });
+    expect(next.interaction).toEqual({ status: "drawing-house-outline", points: [{ x: 0, y: 0, z: 0 }] });
+  });
+
+  it("removing the last point when there are none is a no-op", () => {
+    const drawing = studioReducer(initialStudioState, { type: "select-tool", tool: "house" });
+    const next = studioReducer(drawing, { type: "remove-last-outline-point" });
+    expect(next.interaction).toEqual({ status: "drawing-house-outline", points: [] });
+  });
+
+  it("sets a recoverable error message on the in-progress outline", () => {
+    const drawing = studioReducer(initialStudioState, { type: "select-tool", tool: "house" });
+    const next = studioReducer(drawing, { type: "set-outline-error", error: "The outline encloses zero area." });
+    expect(next.interaction).toEqual({
+      status: "drawing-house-outline",
+      points: [],
+      error: "The outline encloses zero area.",
+    });
+  });
+
+  it("escape cancels the in-progress outline entirely", () => {
+    let state = studioReducer(initialStudioState, { type: "select-tool", tool: "house" });
+    state = studioReducer(state, { type: "add-outline-point", point: { x: 0, y: 0, z: 0 } });
+    const next = studioReducer(state, { type: "escape" });
+    expect(next.interaction).toEqual({ status: "idle" });
+    expect(next.tool).toBe("select");
+  });
+});
+
+describe("studioReducer: vertex selection", () => {
+  it("selects a vertex and clears any object selection", () => {
+    const withObject = studioReducer(initialStudioState, { type: "select-object", objectId: "post-1" });
+    const next = studioReducer(withObject, {
+      type: "select-vertex",
+      vertex: { outlineId: "house-1", index: 0 },
+    });
+    expect(next.selectedVertex).toEqual({ outlineId: "house-1", index: 0 });
+    expect(next.selectedObjectId).toBeNull();
+    expect(next.interaction).toEqual({ status: "selecting" });
+  });
+
+  it("selecting an object clears any vertex selection", () => {
+    const withVertex = studioReducer(initialStudioState, {
+      type: "select-vertex",
+      vertex: { outlineId: "house-1", index: 0 },
+    });
+    const next = studioReducer(withVertex, { type: "select-object", objectId: "post-1" });
+    expect(next.selectedVertex).toBeNull();
+    expect(next.selectedObjectId).toBe("post-1");
+  });
+
+  it("set-interaction sets the interaction state directly", () => {
+    const next = studioReducer(initialStudioState, {
+      type: "set-interaction",
+      interaction: { status: "invalid", reason: "The outline encloses zero area." },
+    });
+    expect(next.interaction).toEqual({ status: "invalid", reason: "The outline encloses zero area." });
+  });
+
+  it("clearing the vertex selection returns to idle", () => {
+    const withVertex = studioReducer(initialStudioState, {
+      type: "select-vertex",
+      vertex: { outlineId: "house-1", index: 0 },
+    });
+    const next = studioReducer(withVertex, { type: "select-vertex", vertex: null });
+    expect(next.selectedVertex).toBeNull();
+    expect(next.interaction).toEqual({ status: "idle" });
+  });
+});

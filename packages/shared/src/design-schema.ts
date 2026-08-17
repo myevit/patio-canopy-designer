@@ -91,12 +91,18 @@ const HouseOutlineSchema = z.object({
   points: z.array(Vector3MmSchema).min(3),
 });
 
+const GutterSchema = z.object({
+  widthMm: finiteNumber.positive(),
+  dropMm: finiteNumber.nonnegative(),
+});
+
 const RoofPlaneSchema = z.object({
   id: z.string().min(1),
-  pointMm: Vector3MmSchema,
-  normal: Vector3MmSchema,
-  outline: z.array(Vector3MmSchema).min(3),
-  pitchLabel: z.string().min(1).optional(),
+  houseOutlineId: z.string().min(1),
+  referenceElevationMm: finiteNumber,
+  pitchDeg: finiteNumber.min(0).max(89),
+  directionRad: finiteNumber,
+  gutter: GutterSchema,
 });
 
 const PatioOutlineSchema = z.object({
@@ -181,6 +187,17 @@ export const ProjectDocumentSchema = z
     requireGloballyUniqueSelectableIds(doc.members, "members");
     requireGloballyUniqueSelectableIds(doc.joints, "joints");
 
+    const houseOutlineIds = new Set(doc.site.houseOutlines.map((h) => h.id));
+    doc.site.roofPlanes.forEach((roofPlane, index) => {
+      if (!houseOutlineIds.has(roofPlane.houseOutlineId)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Unknown house outline id: ${roofPlane.houseOutlineId}`,
+          path: ["site", "roofPlanes", index, "houseOutlineId"],
+        });
+      }
+    });
+
     const anchorIds = new Set(doc.anchors.map((a) => a.id));
     const sectionIds = new Set(doc.sections.map((s) => s.id));
     const materialIds = new Set(doc.materials.map((m) => m.id));
@@ -260,6 +277,7 @@ export type FanField = z.infer<typeof FanFieldSchema>;
 export type Joint = z.infer<typeof JointSchema>;
 export type HouseOutline = z.infer<typeof HouseOutlineSchema>;
 export type RoofPlane = z.infer<typeof RoofPlaneSchema>;
+export type Gutter = z.infer<typeof GutterSchema>;
 export type PatioOutline = z.infer<typeof PatioOutlineSchema>;
 
 export type ParseProjectDocumentResult =
