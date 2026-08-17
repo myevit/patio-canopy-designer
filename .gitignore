@@ -5,6 +5,7 @@ coverage/
 .vite/
 playwright-report/
 test-results/
+artifacts/
 *.log
 .DS_Store
 .env
