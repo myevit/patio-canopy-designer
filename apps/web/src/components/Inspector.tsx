@@ -136,6 +136,10 @@ function HouseDrawingPanel({ points, onAddPoint, onRemoveLastPoint, onCloseOutli
   );
 }
 
+function formatDegrees(radians: number): number {
+  return Number(((radians * 180) / Math.PI).toFixed(4));
+}
+
 export interface InspectorProps {
   selected: SceneObject | undefined;
   selectedVertex?: SelectedVertex | null;
@@ -237,12 +241,12 @@ export function Inspector({
               />
               <NumberField
                 label="Pitch (degrees)"
-                value={(roofPlane.pitchRad * 180) / Math.PI}
+                value={formatDegrees(roofPlane.pitchRad)}
                 onCommit={(pitchDeg) => onUpdateRoofPlane(roofPlane.id, { pitchRad: (pitchDeg * Math.PI) / 180 })}
               />
               <NumberField
                 label="Direction (degrees)"
-                value={(roofPlane.directionRad * 180) / Math.PI}
+                value={formatDegrees(roofPlane.directionRad)}
                 onCommit={(directionDeg) =>
                   onUpdateRoofPlane(roofPlane.id, { directionRad: (directionDeg * Math.PI) / 180 })
                 }

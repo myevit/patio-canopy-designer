@@ -155,13 +155,13 @@ describe("Inspector house outline and roof plane editing", () => {
       kind: "roof-plane",
       houseOutlineId: "house-1",
       referenceElevationMm: 2690,
-      pitchRad: (12 * Math.PI) / 180,
+      pitchRad: (15 * Math.PI) / 180,
       directionRad: 0,
       outline: outline.kind === "house-outline" ? outline.points : [],
     };
     render(<Inspector selected={outline} roofPlane={roofPlane} onUpdateRoofPlane={() => {}} />);
     expect(screen.getByLabelText(/reference elevation/i)).toHaveValue(2690);
-    expect(screen.getByLabelText(/pitch/i)).toHaveValue(12);
+    expect(screen.getByLabelText(/pitch/i)).toHaveValue(15);
   });
 
   it("commits a pitch change, converting the displayed degrees back to radians", () => {

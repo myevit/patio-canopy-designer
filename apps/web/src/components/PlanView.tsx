@@ -240,6 +240,7 @@ export function PlanView({
           data-testid={`patio-outline-${outline.id}`}
           className="plan-view__patio"
           points={toPoints(outline.points)}
+          pointerEvents="none"
         />
       ))}
       {scene.roofPlanes.map((roofPlane) => (
