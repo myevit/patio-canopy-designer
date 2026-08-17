@@ -540,6 +540,11 @@ export function applyCommand(document: ProjectDocument, command: DocumentCommand
       draft.joints = draft.joints.filter((j) => j.id !== command.jointId);
       return finalize(draft);
     }
+
+    case "set-display-units": {
+      draft.displayUnits = command.displayUnits;
+      return finalize(draft);
+    }
   }
 }
 

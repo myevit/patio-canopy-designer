@@ -6,6 +6,7 @@ import type {
   FanTarget,
   ProjectDocument,
 } from "../design-schema.js";
+import type { DisplayLengthUnit } from "../format-length.js";
 import type { Vector3Mm } from "../units.js";
 
 export interface FanMemberTemplatePatch {
@@ -119,7 +120,8 @@ export type DocumentCommand =
         engineeringStatus: EngineeringStatus;
       }>;
     }
-  | { type: "delete-joint"; jointId: string };
+  | { type: "delete-joint"; jointId: string }
+  | { type: "set-display-units"; displayUnits: DisplayLengthUnit };
 
 export type CommandResult =
   | { ok: true; document: ProjectDocument }

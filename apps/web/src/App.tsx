@@ -654,11 +654,13 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
           canRedo={documentController.canRedo}
           canExport={topologyIssues.length === 0}
           exportBlockedReason="Resolve topology issues before exporting."
+          displayUnits={documentController.document.displayUnits}
           onNew={handleNewProject}
           onExport={handleExport}
           onImport={handleImport}
           onUndo={documentController.undo}
           onRedo={documentController.redo}
+          onChangeDisplayUnits={(displayUnits) => dispatchGatedCommand({ type: "set-display-units", displayUnits })}
         />
         <ViewModeSwitcher
           viewMode={state.viewMode}
@@ -715,6 +717,7 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
           <TopologyDiagnosticsPanel issues={topologyIssues} />
           <Inspector
             selected={selected}
+            displayUnits={documentController.document.displayUnits}
             selectedVertex={state.selectedVertex}
             vertexOutline={vertexOutline}
             roofPlane={roofPlaneForSelected}

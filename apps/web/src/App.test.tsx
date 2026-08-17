@@ -658,6 +658,18 @@ describe("App: undo/redo and project menu", () => {
     expect(screen.getAllByLabelText(/^House outline/).length).toBe(before + 1);
   });
 
+  it("switching display units to ft-in updates the house-drawing coordinate labels", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "House" }));
+    expect(screen.getByLabelText(/^x \(mm\)/i)).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText(/units/i), "ft-in");
+
+    expect(screen.getByLabelText(/^x \(ft-in\)/i)).toBeInTheDocument();
+  });
+
   it("New clears the project back to an empty document", async () => {
     const user = userEvent.setup();
     renderApp();

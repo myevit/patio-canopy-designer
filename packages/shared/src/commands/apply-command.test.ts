@@ -1520,3 +1520,27 @@ describe("applyCommand: update-gutter", () => {
     expect(result.ok).toBe(false);
   });
 });
+
+describe("applyCommand: set-display-units", () => {
+  it("changes the document's display units and bumps the revision", () => {
+    const doc = baseDoc();
+    expect(doc.displayUnits).toBe("mm");
+    const result = applyCommand(doc, { type: "set-display-units", displayUnits: "ft-in" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.displayUnits).toBe("ft-in");
+      expect(result.document.revision).toBe(doc.revision + 1);
+    }
+  });
+
+  it("leaves all other document state untouched", () => {
+    const doc = baseDoc();
+    const result = applyCommand(doc, { type: "set-display-units", displayUnits: "m" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.document.site).toEqual(doc.site);
+      expect(result.document.anchors).toEqual(doc.anchors);
+      expect(result.document.members).toEqual(doc.members);
+    }
+  });
+});

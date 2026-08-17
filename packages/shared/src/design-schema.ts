@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { deriveFanFieldTargetPositions } from "./fan-field-geometry.js";
+import { DISPLAY_LENGTH_UNITS } from "./format-length.js";
 import { validateOutline } from "./outline-validation.js";
 import type { Vector3Mm } from "./units.js";
 
@@ -168,7 +169,7 @@ const ProjectMetadataSchema = z.object({
   notes: z.string().optional(),
 });
 
-const DisplayUnitsSchema = z.enum(["mm", "m", "ft-in"]);
+const DisplayUnitsSchema = z.enum(DISPLAY_LENGTH_UNITS);
 
 export const ProjectDocumentSchema = z
   .object({

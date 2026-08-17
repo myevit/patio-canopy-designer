@@ -604,6 +604,165 @@ describe("Inspector house outline and roof plane editing", () => {
   });
 });
 
+describe("Inspector house outline and roof plane editing, ft-in display units", () => {
+  const outline: SceneObject = {
+    id: "house-1",
+    kind: "house-outline",
+    points: [
+      { x: 0, y: 0, z: 0 },
+      { x: 4000, y: 0, z: 0 },
+      { x: 4000, y: 3000, z: 0 },
+      { x: 0, y: 3000, z: 0 },
+    ],
+  };
+
+  it("shows reference elevation in feet-inches and commits a feet-inches edit back to millimetres", () => {
+    const onUpdateRoofPlane = vi.fn();
+    const roofPlane: SceneRoofPlane = {
+      id: "roof-1",
+      kind: "roof-plane",
+      houseOutlineId: "house-1",
+      referenceElevationMm: 3048,
+      pitchRad: (15 * Math.PI) / 180,
+      directionRad: 0,
+      outline: [],
+    };
+    render(
+      <Inspector
+        selected={outline}
+        roofPlane={roofPlane}
+        onUpdateRoofPlane={onUpdateRoofPlane}
+        displayUnits="ft-in"
+      />,
+    );
+    const elevationField = screen.getByLabelText(/reference elevation/i);
+    expect(elevationField).toHaveValue(`10'-0"`);
+    fireEvent.change(elevationField, { target: { value: `9'-0"` } });
+    fireEvent.blur(elevationField);
+    expect(onUpdateRoofPlane).toHaveBeenCalledWith("roof-1", { referenceElevationMm: expect.closeTo(2743.2, 6) });
+  });
+
+  it("shows pitch as a rise-per-12-run ratio and commits a ratio edit back to radians", () => {
+    const onUpdateRoofPlane = vi.fn();
+    const roofPlane: SceneRoofPlane = {
+      id: "roof-1",
+      kind: "roof-plane",
+      houseOutlineId: "house-1",
+      referenceElevationMm: 2690,
+      pitchRad: Math.atan(6 / 12),
+      directionRad: 0,
+      outline: [],
+    };
+    render(
+      <Inspector
+        selected={outline}
+        roofPlane={roofPlane}
+        onUpdateRoofPlane={onUpdateRoofPlane}
+        displayUnits="ft-in"
+      />,
+    );
+    const pitchField = screen.getByLabelText(/pitch/i);
+    expect(pitchField).toHaveValue("6:12");
+    fireEvent.change(pitchField, { target: { value: "4:12" } });
+    fireEvent.blur(pitchField);
+    expect(onUpdateRoofPlane).toHaveBeenCalledWith("roof-1", { pitchRad: expect.closeTo(Math.atan(4 / 12), 9) });
+  });
+
+  it("rejects malformed pitch text without calling onUpdateRoofPlane, and restores the prior display", () => {
+    const onUpdateRoofPlane = vi.fn();
+    const roofPlane: SceneRoofPlane = {
+      id: "roof-1",
+      kind: "roof-plane",
+      houseOutlineId: "house-1",
+      referenceElevationMm: 2690,
+      pitchRad: Math.atan(6 / 12),
+      directionRad: 0,
+      outline: [],
+    };
+    render(
+      <Inspector
+        selected={outline}
+        roofPlane={roofPlane}
+        onUpdateRoofPlane={onUpdateRoofPlane}
+        displayUnits="ft-in"
+      />,
+    );
+    const pitchField = screen.getByLabelText(/pitch/i);
+    fireEvent.change(pitchField, { target: { value: "garbage" } });
+    fireEvent.blur(pitchField);
+    expect(onUpdateRoofPlane).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(pitchField).toHaveValue("6:12");
+  });
+
+  it("shows and commits gutter fields in feet-inches via onUpdateGutter", () => {
+    const onUpdateGutter = vi.fn();
+    const roofPlane: SceneRoofPlane = {
+      id: "roof-1",
+      kind: "roof-plane",
+      houseOutlineId: "house-1",
+      referenceElevationMm: 2690,
+      pitchRad: (12 * Math.PI) / 180,
+      directionRad: 0,
+      outline: [],
+    };
+    const gutter = {
+      id: "gutter-1",
+      kind: "gutter" as const,
+      roofPlaneId: "roof-1",
+      start: { x: 0, y: 0, z: 2690 },
+      end: { x: 4000, y: 0, z: 2690 },
+      widthMm: 101.6,
+      dropMm: 50.8,
+    };
+    render(
+      <Inspector
+        selected={outline}
+        roofPlane={roofPlane}
+        gutter={gutter}
+        onUpdateRoofPlane={() => {}}
+        onUpdateGutter={onUpdateGutter}
+        displayUnits="ft-in"
+      />,
+    );
+    const widthField = screen.getByLabelText(/gutter width/i);
+    expect(widthField).toHaveValue(`0'-4"`);
+    fireEvent.change(widthField, { target: { value: `6"` } });
+    fireEvent.blur(widthField);
+    expect(onUpdateGutter).toHaveBeenCalledWith("gutter-1", { widthMm: expect.closeTo(152.4, 6) });
+  });
+});
+
+describe("Inspector keyboard house drawing panel, ft-in display units", () => {
+  it("labels coordinate entry in feet-inches and parses a feet-inches point", () => {
+    const onAddDrawingPoint = vi.fn();
+    render(
+      <Inspector selected={undefined} drawingPoints={[]} onAddDrawingPoint={onAddDrawingPoint} displayUnits="ft-in" />,
+    );
+    const xField = screen.getByLabelText(/^x/i);
+    const yField = screen.getByLabelText(/^y/i);
+    fireEvent.change(xField, { target: { value: `4'` } });
+    fireEvent.change(yField, { target: { value: `8'-6"` } });
+    fireEvent.click(screen.getByRole("button", { name: /add point/i }));
+    expect(onAddDrawingPoint).toHaveBeenCalledWith({
+      x: expect.closeTo(1219.2, 6),
+      y: expect.closeTo(2590.8, 6),
+      z: 0,
+    });
+  });
+
+  it("does not add a point for malformed feet-inches coordinate text", () => {
+    const onAddDrawingPoint = vi.fn();
+    render(
+      <Inspector selected={undefined} drawingPoints={[]} onAddDrawingPoint={onAddDrawingPoint} displayUnits="ft-in" />,
+    );
+    fireEvent.change(screen.getByLabelText(/^x/i), { target: { value: "garbage" } });
+    fireEvent.change(screen.getByLabelText(/^y/i), { target: { value: `4'` } });
+    fireEvent.click(screen.getByRole("button", { name: /add point/i }));
+    expect(onAddDrawingPoint).not.toHaveBeenCalled();
+  });
+});
+
 describe("Inspector NumberField hardening", () => {
   const outline: SceneObject = {
     id: "house-1",

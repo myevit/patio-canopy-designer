@@ -1,5 +1,6 @@
 export * from "./units.js";
 export * from "./format-length.js";
+export * from "./roof-pitch.js";
 export * from "./design-schema.js";
 export * from "./fan-field-geometry.js";
 export * from "./segment-geometry.js";

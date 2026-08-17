@@ -8,11 +8,13 @@ function renderMenu(overrides: Partial<ComponentProps<typeof ProjectMenu>> = {})
   const props = {
     canUndo: false,
     canRedo: false,
+    displayUnits: "mm" as const,
     onNew: vi.fn(),
     onExport: vi.fn(),
     onImport: vi.fn(),
     onUndo: vi.fn(),
     onRedo: vi.fn(),
+    onChangeDisplayUnits: vi.fn(),
     ...overrides,
   };
   render(<ProjectMenu {...props} />);
@@ -64,5 +66,16 @@ describe("ProjectMenu", () => {
     await user.click(screen.getByRole("button", { name: /redo/i }));
     expect(props.onUndo).toHaveBeenCalled();
     expect(props.onRedo).toHaveBeenCalled();
+  });
+
+  it("shows the current display units", () => {
+    renderMenu({ displayUnits: "ft-in" });
+    expect(screen.getByLabelText(/units/i)).toHaveValue("ft-in");
+  });
+
+  it("calls onChangeDisplayUnits when the units selector changes", () => {
+    const props = renderMenu({ displayUnits: "mm" });
+    fireEvent.change(screen.getByLabelText(/units/i), { target: { value: "ft-in" } });
+    expect(props.onChangeDisplayUnits).toHaveBeenCalledWith("ft-in");
   });
 });

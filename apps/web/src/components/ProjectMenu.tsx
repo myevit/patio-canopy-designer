@@ -1,15 +1,18 @@
 import { useId, type ChangeEvent } from "react";
+import type { DisplayLengthUnit } from "@canopy/shared";
 
 export interface ProjectMenuProps {
   canUndo: boolean;
   canRedo: boolean;
   canExport?: boolean;
   exportBlockedReason?: string;
+  displayUnits: DisplayLengthUnit;
   onNew: () => void;
   onExport: () => void;
   onImport: (file: File) => void;
   onUndo: () => void;
   onRedo: () => void;
+  onChangeDisplayUnits: (displayUnits: DisplayLengthUnit) => void;
 }
 
 export function ProjectMenu({
@@ -17,13 +20,16 @@ export function ProjectMenu({
   canRedo,
   canExport = true,
   exportBlockedReason,
+  displayUnits,
   onNew,
   onExport,
   onImport,
   onUndo,
   onRedo,
+  onChangeDisplayUnits,
 }: ProjectMenuProps) {
   const importInputId = useId();
+  const unitsId = useId();
 
   function handleImportChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -62,6 +68,18 @@ export function ProjectMenu({
       <button type="button" onClick={onRedo} disabled={!canRedo}>
         Redo
       </button>
+      <label htmlFor={unitsId} className="project-menu__units-label">
+        Units
+        <select
+          id={unitsId}
+          value={displayUnits}
+          onChange={(event) => onChangeDisplayUnits(event.target.value as DisplayLengthUnit)}
+        >
+          <option value="mm">mm</option>
+          <option value="m">m</option>
+          <option value="ft-in">ft-in</option>
+        </select>
+      </label>
     </div>
   );
 }

@@ -1,13 +1,18 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { SceneGutter, SceneJointCandidate, SceneObject, SceneRoofPlane } from "@canopy/geometry";
-import type {
-  CrossingBehavior,
-  EngineeringStatus,
-  FanDistribution,
-  FanElevationRule,
-  FanField,
-  Section,
-  Vector3Mm,
+import {
+  formatLengthMm,
+  formatPitch,
+  parseLengthMm,
+  parsePitch,
+  type CrossingBehavior,
+  type DisplayLengthUnit,
+  type EngineeringStatus,
+  type FanDistribution,
+  type FanElevationRule,
+  type FanField,
+  type Section,
+  type Vector3Mm,
 } from "@canopy/shared";
 import type { FanDraft } from "../state/fan-draft.js";
 import type { SelectedVertex } from "../state/selected-vertex.js";
@@ -125,6 +130,116 @@ function NumberField({ label, value, onCommit }: NumberFieldProps) {
   );
 }
 
+interface LengthFieldProps {
+  label: string;
+  valueMm: number;
+  unit: DisplayLengthUnit;
+  onCommit: (valueMm: number) => CommandOutcome;
+}
+
+function LengthField({ label, valueMm, unit, onCommit }: LengthFieldProps) {
+  const id = useId();
+  const [text, setText] = useState(() => formatLengthMm(valueMm, unit));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setText(formatLengthMm(valueMm, unit));
+    setError(null);
+  }, [valueMm, unit]);
+
+  function commit() {
+    const parsed = parseLengthMm(text, unit);
+    if (parsed === null) {
+      setError(`Enter a length like 8'-6" or 9".`);
+      setText(formatLengthMm(valueMm, unit));
+      return;
+    }
+    const outcome = onCommit(parsed);
+    if (outcome && !outcome.ok) {
+      setError(outcome.error ?? "That value was rejected.");
+      setText(formatLengthMm(valueMm, unit));
+      return;
+    }
+    setError(null);
+  }
+
+  return (
+    <p className="inspector__field">
+      <label htmlFor={id}>{label}</label>
+      <input
+        id={id}
+        type="text"
+        value={text}
+        aria-invalid={error ? true : undefined}
+        onChange={(event) => setText(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit();
+          }
+        }}
+      />
+      {error && <span role="alert">{error}</span>}
+    </p>
+  );
+}
+
+interface PitchFieldProps {
+  label: string;
+  pitchRad: number;
+  unit: DisplayLengthUnit;
+  onCommit: (pitchRad: number) => CommandOutcome;
+}
+
+function PitchField({ label, pitchRad, unit, onCommit }: PitchFieldProps) {
+  const id = useId();
+  const [text, setText] = useState(() => formatPitch(pitchRad, unit));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setText(formatPitch(pitchRad, unit));
+    setError(null);
+  }, [pitchRad, unit]);
+
+  function commit() {
+    const parsed = parsePitch(text, unit);
+    if (parsed === null) {
+      setError(unit === "ft-in" ? "Enter a pitch like 6:12." : "Enter a pitch in degrees.");
+      setText(formatPitch(pitchRad, unit));
+      return;
+    }
+    const outcome = onCommit(parsed);
+    if (outcome && !outcome.ok) {
+      setError(outcome.error ?? "That value was rejected.");
+      setText(formatPitch(pitchRad, unit));
+      return;
+    }
+    setError(null);
+  }
+
+  return (
+    <p className="inspector__field">
+      <label htmlFor={id}>{label}</label>
+      <input
+        id={id}
+        type="text"
+        value={text}
+        aria-invalid={error ? true : undefined}
+        onChange={(event) => setText(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit();
+          }
+        }}
+      />
+      {error && <span role="alert">{error}</span>}
+    </p>
+  );
+}
+
 interface SectionFieldProps {
   sections: Section[];
   sectionId: string;
@@ -165,21 +280,22 @@ function SectionField({ sections, sectionId, onCommit }: SectionFieldProps) {
 
 interface HouseDrawingPanelProps {
   points: Vector3Mm[];
+  unit: DisplayLengthUnit;
   onAddPoint: (point: Vector3Mm) => void;
   onRemoveLastPoint: () => void;
   onCloseOutline: () => void;
 }
 
-function HouseDrawingPanel({ points, onAddPoint, onRemoveLastPoint, onCloseOutline }: HouseDrawingPanelProps) {
+function HouseDrawingPanel({ points, unit, onAddPoint, onRemoveLastPoint, onCloseOutline }: HouseDrawingPanelProps) {
   const xId = useId();
   const yId = useId();
   const [x, setX] = useState("0");
   const [y, setY] = useState("0");
 
   function handleAddPoint() {
-    const parsedX = Number(x);
-    const parsedY = Number(y);
-    if (!Number.isFinite(parsedX) || !Number.isFinite(parsedY)) return;
+    const parsedX = parseLengthMm(x, unit);
+    const parsedY = parseLengthMm(y, unit);
+    if (parsedX === null || parsedY === null) return;
     onAddPoint({ x: parsedX, y: parsedY, z: 0 });
   }
 
@@ -187,12 +303,12 @@ function HouseDrawingPanel({ points, onAddPoint, onRemoveLastPoint, onCloseOutli
     <div className="inspector__drawing-panel">
       <h3>Draw house outline</h3>
       <p className="inspector__field">
-        <label htmlFor={xId}>X (mm)</label>
-        <input id={xId} type="number" value={x} onChange={(event) => setX(event.target.value)} />
+        <label htmlFor={xId}>X ({unit})</label>
+        <input id={xId} type="text" value={x} onChange={(event) => setX(event.target.value)} />
       </p>
       <p className="inspector__field">
-        <label htmlFor={yId}>Y (mm)</label>
-        <input id={yId} type="number" value={y} onChange={(event) => setY(event.target.value)} />
+        <label htmlFor={yId}>Y ({unit})</label>
+        <input id={yId} type="text" value={y} onChange={(event) => setY(event.target.value)} />
       </p>
       <button type="button" onClick={handleAddPoint}>
         Add point
@@ -600,6 +716,7 @@ export interface BeamPatch {
 
 export interface InspectorProps {
   selected: SceneObject | undefined;
+  displayUnits?: DisplayLengthUnit;
   selectedVertex?: SelectedVertex | null;
   vertexOutline?: Extract<SceneObject, { kind: "house-outline" }>;
   roofPlane?: SceneRoofPlane | null;
@@ -645,6 +762,7 @@ export interface InspectorProps {
 
 export function Inspector({
   selected,
+  displayUnits = "mm",
   selectedVertex = null,
   vertexOutline,
   roofPlane = null,
@@ -717,6 +835,7 @@ export function Inspector({
       {drawingPoints !== null ? (
         <HouseDrawingPanel
           points={drawingPoints}
+          unit={displayUnits}
           onAddPoint={onAddDrawingPoint}
           onRemoveLastPoint={onRemoveLastDrawingPoint}
           onCloseOutline={onCloseDrawing}
@@ -760,18 +879,38 @@ export function Inspector({
           {roofPlane && (
             <>
               <h3>Roof plane</h3>
-              <NumberField
-                label="Reference elevation (eave, mm)"
-                value={roofPlane.referenceElevationMm}
-                onCommit={(referenceElevationMm) =>
-                  onUpdateRoofPlane(roofPlane.id, { referenceElevationMm })
-                }
-              />
-              <NumberField
-                label="Pitch (degrees)"
-                value={formatDegrees(roofPlane.pitchRad)}
-                onCommit={(pitchDeg) => onUpdateRoofPlane(roofPlane.id, { pitchRad: (pitchDeg * Math.PI) / 180 })}
-              />
+              {displayUnits === "ft-in" ? (
+                <LengthField
+                  label="Reference elevation (eave, ft-in)"
+                  valueMm={roofPlane.referenceElevationMm}
+                  unit={displayUnits}
+                  onCommit={(referenceElevationMm) =>
+                    onUpdateRoofPlane(roofPlane.id, { referenceElevationMm })
+                  }
+                />
+              ) : (
+                <NumberField
+                  label="Reference elevation (eave, mm)"
+                  value={roofPlane.referenceElevationMm}
+                  onCommit={(referenceElevationMm) =>
+                    onUpdateRoofPlane(roofPlane.id, { referenceElevationMm })
+                  }
+                />
+              )}
+              {displayUnits === "ft-in" ? (
+                <PitchField
+                  label="Pitch (rise:12)"
+                  pitchRad={roofPlane.pitchRad}
+                  unit={displayUnits}
+                  onCommit={(pitchRad) => onUpdateRoofPlane(roofPlane.id, { pitchRad })}
+                />
+              ) : (
+                <NumberField
+                  label="Pitch (degrees)"
+                  value={formatDegrees(roofPlane.pitchRad)}
+                  onCommit={(pitchDeg) => onUpdateRoofPlane(roofPlane.id, { pitchRad: (pitchDeg * Math.PI) / 180 })}
+                />
+              )}
               <NumberField
                 label="Direction (degrees)"
                 value={formatDegrees(roofPlane.directionRad)}
@@ -779,20 +918,36 @@ export function Inspector({
                   onUpdateRoofPlane(roofPlane.id, { directionRad: (directionDeg * Math.PI) / 180 })
                 }
               />
-              {gutter && (
-                <>
-                  <NumberField
-                    label="Gutter width (mm)"
-                    value={gutter.widthMm}
-                    onCommit={(widthMm) => onUpdateGutter(gutter.id, { widthMm })}
-                  />
-                  <NumberField
-                    label="Gutter drop (mm)"
-                    value={gutter.dropMm}
-                    onCommit={(dropMm) => onUpdateGutter(gutter.id, { dropMm })}
-                  />
-                </>
-              )}
+              {gutter &&
+                (displayUnits === "ft-in" ? (
+                  <>
+                    <LengthField
+                      label="Gutter width (ft-in)"
+                      valueMm={gutter.widthMm}
+                      unit={displayUnits}
+                      onCommit={(widthMm) => onUpdateGutter(gutter.id, { widthMm })}
+                    />
+                    <LengthField
+                      label="Gutter drop (ft-in)"
+                      valueMm={gutter.dropMm}
+                      unit={displayUnits}
+                      onCommit={(dropMm) => onUpdateGutter(gutter.id, { dropMm })}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <NumberField
+                      label="Gutter width (mm)"
+                      value={gutter.widthMm}
+                      onCommit={(widthMm) => onUpdateGutter(gutter.id, { widthMm })}
+                    />
+                    <NumberField
+                      label="Gutter drop (mm)"
+                      value={gutter.dropMm}
+                      onCommit={(dropMm) => onUpdateGutter(gutter.id, { dropMm })}
+                    />
+                  </>
+                ))}
             </>
           )}
         </>
