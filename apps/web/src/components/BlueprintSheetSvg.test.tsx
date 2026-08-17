@@ -75,4 +75,25 @@ describe("BlueprintSheetSvg", () => {
     render(<BlueprintSheetSvg sheet={drawingSheet({ views: [], unresolvedItems: [] })} />);
     expect(screen.getByTestId("blueprint-unresolved-schedule")).toHaveTextContent(/no unresolved items/i);
   });
+
+  it("keeps the SVG viewBox within the page bounds, reserving a band for the title block so it is never clipped", () => {
+    render(<BlueprintSheetSvg sheet={drawingSheet()} />);
+    const svg = screen.getByRole("img", { name: "Blueprint sheet" });
+    // A3 landscape is 420x297mm; 30mm is reserved below the drawing for the title block.
+    expect(svg.getAttribute("viewBox")).toBe("0 0 420 267");
+  });
+
+  it("in screen mode (the default), shows the sheet's computed scale for reference", () => {
+    render(<BlueprintSheetSvg sheet={drawingSheet()} mode="screen" />);
+    expect(screen.getByTestId("blueprint-title-block-scale")).toHaveTextContent("1:20");
+    expect(screen.queryByTestId("blueprint-print-scale-footnote")).not.toBeInTheDocument();
+  });
+
+  it("in print mode, replaces the computed scale with an honest, paper-independent label and a footnote", () => {
+    render(<BlueprintSheetSvg sheet={drawingSheet()} mode="print" />);
+    const scale = screen.getByTestId("blueprint-title-block-scale");
+    expect(scale).toHaveTextContent(/indicative/i);
+    expect(scale).not.toHaveTextContent("1:20");
+    expect(screen.getByTestId("blueprint-print-scale-footnote")).toHaveTextContent(/not guaranteed/i);
+  });
 });

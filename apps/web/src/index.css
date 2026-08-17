@@ -347,13 +347,34 @@ body {
 }
 
 .blueprint-sheet__title-block {
-  display: flex;
-  gap: 1.5rem;
   border-top: 1px solid #566370;
   padding: 0.5rem 0;
 }
 
+.blueprint-sheet__title-block-fields {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.blueprint-sheet__print-footnote {
+  margin: 0.25rem 0 0;
+  font-size: 3px;
+  color: #566370;
+}
+
+/* Print-only duplicate of every sheet (see BlueprintPrintPackage); hidden on
+   screen, shown only under @media print so a single Print click emits the
+   full package, not just the sheet in the on-screen preview. */
+.blueprint-print-package {
+  display: none;
+}
+
 @media print {
+  @page {
+    size: A3 landscape;
+    margin: 0;
+  }
+
   .studio-shell__top-bar,
   .studio-shell__body,
   .status-bar,
@@ -368,12 +389,56 @@ body {
     border: none;
   }
 
-  .blueprints-panel__toolbar {
+  .blueprints-panel__toolbar,
+  .blueprint-sheet--screen {
     display: none;
   }
 
-  .blueprint-sheet {
-    page-break-after: always;
+  .blueprint-print-package {
+    display: block;
+  }
+
+  .blueprint-print-package__page {
     margin: 0;
+  }
+
+  /* Only non-first pages break before themselves - never break-after the
+     last page - so the package prints with exactly one break per sheet
+     boundary and no trailing blank page. */
+  .blueprint-print-package__page[data-page-break="before"] {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .blueprint-print-package__page[data-page-break="start"] {
+    break-before: auto;
+    page-break-before: avoid;
+  }
+
+  /* The figure is pinned to the exact A3 landscape box (matching @page
+     above): the SVG takes a fixed 267mm and the title block - scale label
+     plus honesty footnote - flexes to fill the remaining 30mm, so neither
+     ever pushes the figure past 297mm and onto a spurious extra page. */
+  .blueprint-sheet--print {
+    display: flex;
+    flex-direction: column;
+    width: 420mm;
+    height: 297mm;
+    margin: 0;
+  }
+
+  .blueprint-sheet--print .blueprint-sheet__svg {
+    width: 420mm;
+    height: 267mm; /* A3 landscape height minus the reserved title-block band, so the title block is never clipped */
+    flex: none;
+  }
+
+  .blueprint-sheet--print .blueprint-sheet__title-block {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
 }

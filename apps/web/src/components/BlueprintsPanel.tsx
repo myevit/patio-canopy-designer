@@ -1,5 +1,6 @@
 import type { BlueprintSheetSet } from "@canopy/geometry";
 import { useState } from "react";
+import { BlueprintPrintPackage } from "./BlueprintPrintPackage.js";
 import { BlueprintSheetSvg } from "./BlueprintSheetSvg.js";
 
 export interface BlueprintsPanelProps {
@@ -41,7 +42,10 @@ export function BlueprintsPanel({ sheetSet, onPrint }: BlueprintsPanelProps) {
           Print
         </button>
       </div>
-      <BlueprintSheetSvg sheet={sheet} />
+      <div data-testid="blueprint-active-sheet">
+        <BlueprintSheetSvg sheet={sheet} />
+      </div>
+      <BlueprintPrintPackage sheetSet={sheetSet} />
     </section>
   );
 }

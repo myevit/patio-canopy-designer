@@ -1,21 +1,34 @@
-import { A3_LANDSCAPE_MM, type BlueprintSheet, type Point2D } from "@canopy/geometry";
+import { A3_LANDSCAPE_MM, DEFAULT_PAGE_LAYOUT, type BlueprintSheet, type Point2D } from "@canopy/geometry";
 
 function pointsAttr(points: Point2D[]): string {
   return points.map((p) => `${p.x},${p.y}`).join(" ");
 }
 
+/** Print scale can't be honored on arbitrary paper/printer setups - browsers may shrink-to-fit regardless of `@page` sizing - so the printed title block must say so plainly instead of asserting an exact `1:N` fit. */
+const PRINT_SCALE_LABEL = "Indicative — not to scale";
+const PRINT_SCALE_FOOTNOTE =
+  "Scale is indicative only; exact 1:N fit on paper is not guaranteed across browsers and printers. Use the printed dimension callouts, not a ruler on the drawing.";
+
 export interface BlueprintSheetSvgProps {
   sheet: BlueprintSheet;
   pageSize?: { widthMm: number; heightMm: number };
+  /** "screen" (default) shows the sheet's computed scale for reference; "print" replaces it with an honest, paper-independent label. */
+  mode?: "screen" | "print";
 }
 
 /** Renders one already-laid-out blueprint sheet - a plain visualization of validated, projected geometry, no numbers re-entered by hand. */
-export function BlueprintSheetSvg({ sheet, pageSize = A3_LANDSCAPE_MM }: BlueprintSheetSvgProps) {
+export function BlueprintSheetSvg({ sheet, pageSize = A3_LANDSCAPE_MM, mode = "screen" }: BlueprintSheetSvgProps) {
   const { titleBlock } = sheet;
-  const viewBox = `0 0 ${pageSize.widthMm} ${pageSize.heightMm}`;
+  const titleBlockHeightMm = DEFAULT_PAGE_LAYOUT.titleBlockHeightMm;
+  const contentHeightMm = pageSize.heightMm - titleBlockHeightMm;
+  const viewBox = `0 0 ${pageSize.widthMm} ${contentHeightMm}`;
+  const scaleLabel = mode === "print" ? PRINT_SCALE_LABEL : titleBlock.scale;
 
   return (
-    <figure className="blueprint-sheet" aria-label={`Blueprint sheet ${titleBlock.sheetNumber} of ${titleBlock.sheetCount}`}>
+    <figure
+      className={`blueprint-sheet blueprint-sheet--${mode}`}
+      aria-label={`Blueprint sheet ${titleBlock.sheetNumber} of ${titleBlock.sheetCount}`}
+    >
       <svg role="img" aria-label="Blueprint sheet" viewBox={viewBox} className="blueprint-sheet__svg">
         {sheet.views.map((view) => (
           <g key={view.key} data-testid={`blueprint-view-${view.key}`}>
@@ -111,13 +124,20 @@ export function BlueprintSheetSvg({ sheet, pageSize = A3_LANDSCAPE_MM }: Bluepri
       )}
 
       <div data-testid="blueprint-title-block" className="blueprint-sheet__title-block">
-        <span>{titleBlock.projectName}</span>
-        <span>Rev {titleBlock.revision}</span>
-        <span>{titleBlock.date}</span>
-        <span>{titleBlock.scale}</span>
-        <span>
-          Sheet {titleBlock.sheetNumber} of {titleBlock.sheetCount}
-        </span>
+        <div className="blueprint-sheet__title-block-fields">
+          <span>{titleBlock.projectName}</span>
+          <span>Rev {titleBlock.revision}</span>
+          <span>{titleBlock.date}</span>
+          <span data-testid="blueprint-title-block-scale">{scaleLabel}</span>
+          <span>
+            Sheet {titleBlock.sheetNumber} of {titleBlock.sheetCount}
+          </span>
+        </div>
+        {mode === "print" && (
+          <p data-testid="blueprint-print-scale-footnote" className="blueprint-sheet__print-footnote">
+            {PRINT_SCALE_FOOTNOTE}
+          </p>
+        )}
       </div>
     </figure>
   );
