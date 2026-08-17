@@ -257,3 +257,67 @@ body {
   padding: 0 1rem 0.75rem;
   color: #566370;
 }
+
+.bom-panel table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.bom-panel th,
+.bom-panel td {
+  border: 1px solid #cbd3d9;
+  padding: 0.3rem 0.5rem;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.cut-card {
+  border: 1px solid #cbd3d9;
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.cut-diagram {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  margin: 0;
+}
+
+.cut-diagram__side-view {
+  width: 320px;
+  height: 80px;
+}
+
+.cut-diagram__end-views {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.cut-diagram__end-view {
+  width: 80px;
+  height: 80px;
+}
+
+.cut-diagram polygon {
+  fill: #e4e9ec;
+  stroke: #566370;
+  stroke-width: 4;
+}
+
+@media print {
+  .studio-shell__top-bar,
+  .studio-shell__body,
+  .status-bar,
+  .drawer__header {
+    display: none;
+  }
+
+  .drawer,
+  .drawer__content {
+    display: block !important;
+    padding: 0;
+    border: none;
+  }
+}

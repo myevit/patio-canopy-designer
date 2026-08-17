@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useReducer, useRef } from "react";
-import { buildScene, type SceneJointCandidate } from "@canopy/geometry";
+import { buildCutFabrication, buildMemberSchedule, buildScene, toBomCsv, type SceneJointCandidate } from "@canopy/geometry";
 import {
   DEFAULT_BEAM_SECTION_ID,
   DEFAULT_POST_SECTION_ID,
@@ -16,7 +16,9 @@ import {
   type Section,
   type Vector3Mm,
 } from "@canopy/shared";
+import { BomPanel } from "./components/BomPanel.js";
 import { BottomDrawer } from "./components/BottomDrawer.js";
+import { CutsPanel } from "./components/CutsPanel.js";
 import {
   Inspector,
   type BeamPatch,
@@ -83,6 +85,11 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
     () => findTopologyIssues(documentController.document),
     [documentController.document],
   );
+  const memberSchedule = useMemo(
+    () => buildMemberSchedule(documentController.document),
+    [documentController.document],
+  );
+  const cutCards = useMemo(() => buildCutFabrication(documentController.document), [documentController.document]);
 
   function dispatchGatedCommand(command: DocumentCommand): { ok: true } | { ok: false; error: string } {
     if (!persistence.loaded) {
@@ -566,6 +573,21 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
     URL.revokeObjectURL(url);
   }
 
+  function handleDownloadBomCsv() {
+    const csv = toBomCsv(memberSchedule.rows, documentController.document.sections, documentController.document.materials);
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const anchor = window.document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${documentController.document.metadata.name.replace(/\s+/g, "-").toLowerCase()}-bom.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handlePrintBom() {
+    window.print();
+  }
+
   function handleImport(file: File) {
     void file.text().then((text) => {
       const result = importProjectDocument(text);
@@ -700,6 +722,18 @@ export function App({ persistenceAdapter: providedAdapter }: AppProps = {}) {
         tab={state.drawerTab}
         onSelectTab={(tab) => dispatch({ type: "set-drawer-tab", tab })}
         onToggleOpen={() => dispatch({ type: "toggle-drawer" })}
+        bomContent={
+          <BomPanel
+            schedule={memberSchedule}
+            sections={documentController.document.sections}
+            materials={documentController.document.materials}
+            displayUnits={documentController.document.displayUnits}
+            onDownloadCsv={handleDownloadBomCsv}
+            onPrint={handlePrintBom}
+            onSelectObject={(objectId) => dispatch({ type: "select-object", objectId })}
+          />
+        }
+        cutsContent={<CutsPanel cards={cutCards} />}
       />
     </div>
   );

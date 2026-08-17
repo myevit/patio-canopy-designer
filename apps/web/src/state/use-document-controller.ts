@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   canRedo as historyCanRedo,
   canUndo as historyCanUndo,
@@ -26,21 +26,37 @@ export interface DocumentController {
 export function useDocumentController(initialDocument: ProjectDocument): DocumentController {
   const [history, setHistory] = useState<DocumentHistory>(() => createHistory(initialDocument));
 
-  const dispatchCommand = useCallback(
-    (command: DocumentCommand): DispatchCommandResult => {
-      const result = pushCommand(history, command);
-      if (!result.ok) {
-        return { ok: false, error: result.error };
-      }
-      setHistory(result.history);
-      return { ok: true };
-    },
-    [history],
-  );
+  // React only re-renders (and updates `history`) between event handlers, so
+  // two dispatchCommand calls in the same synchronous handler - e.g.
+  // creating an anchor, then immediately drawing a beam to it - would both
+  // read the same pre-update `history` via closure. This ref is updated
+  // synchronously inside dispatchCommand/undo/redo/resetTo so a later call in
+  // the same handler always sees the prior call's effect.
+  const historyRef = useRef(history);
+  historyRef.current = history;
 
-  const undo = useCallback(() => setHistory((current) => historyUndo(current)), []);
-  const redo = useCallback(() => setHistory((current) => historyRedo(current)), []);
-  const resetTo = useCallback((document: ProjectDocument) => setHistory(createHistory(document)), []);
+  const dispatchCommand = useCallback((command: DocumentCommand): DispatchCommandResult => {
+    const result = pushCommand(historyRef.current, command);
+    if (!result.ok) {
+      return { ok: false, error: result.error };
+    }
+    historyRef.current = result.history;
+    setHistory(result.history);
+    return { ok: true };
+  }, []);
+
+  const undo = useCallback(() => {
+    historyRef.current = historyUndo(historyRef.current);
+    setHistory(historyRef.current);
+  }, []);
+  const redo = useCallback(() => {
+    historyRef.current = historyRedo(historyRef.current);
+    setHistory(historyRef.current);
+  }, []);
+  const resetTo = useCallback((document: ProjectDocument) => {
+    historyRef.current = createHistory(document);
+    setHistory(historyRef.current);
+  }, []);
 
   return useMemo(
     () => ({

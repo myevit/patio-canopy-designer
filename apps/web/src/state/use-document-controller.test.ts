@@ -73,6 +73,28 @@ describe("useDocumentController", () => {
     expect(result.current.document.site.houseOutlines).toHaveLength(1);
   });
 
+  it("applies two commands dispatched synchronously in the same handler in order, the second seeing the first's effect", () => {
+    const { result } = setup();
+    act(() => {
+      const first = result.current.dispatchCommand({
+        type: "create-house-outline",
+        outlineId: "house-1",
+        points: rectanglePoints(),
+      });
+      expect(first.ok).toBe(true);
+      // A second command in the same synchronous handler must see the
+      // outline created by the first, not a stale pre-update document.
+      const second = result.current.dispatchCommand({
+        type: "insert-house-outline-vertex",
+        outlineId: "house-1",
+        afterIndex: 0,
+        position: { x: 2000, y: -500, z: 0 },
+      });
+      expect(second.ok).toBe(true);
+    });
+    expect(result.current.document.site.houseOutlines[0]!.points).toHaveLength(5);
+  });
+
   it("resetTo replaces the document and clears history", () => {
     const { result } = setup();
     act(() => {

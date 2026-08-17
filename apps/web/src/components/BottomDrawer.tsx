@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { DrawerTab } from "../state/studio-store.js";
 
 const TABS: { id: DrawerTab; label: string }[] = [
@@ -17,9 +18,16 @@ export interface BottomDrawerProps {
   tab: DrawerTab;
   onSelectTab: (tab: DrawerTab) => void;
   onToggleOpen: () => void;
+  bomContent?: ReactNode;
+  cutsContent?: ReactNode;
 }
 
-export function BottomDrawer({ open, tab, onSelectTab, onToggleOpen }: BottomDrawerProps) {
+export function BottomDrawer({ open, tab, onSelectTab, onToggleOpen, bomContent, cutsContent }: BottomDrawerProps) {
+  const content: Record<DrawerTab, ReactNode> = {
+    bom: bomContent ?? <p>{TAB_DESCRIPTIONS.bom}: not available in this milestone.</p>,
+    cuts: cutsContent ?? <p>{TAB_DESCRIPTIONS.cuts}: not available in this milestone.</p>,
+    blueprints: <p>{TAB_DESCRIPTIONS.blueprints}: not available in this milestone.</p>,
+  };
   return (
     <section aria-label="Output drawer" className={open ? "drawer drawer--open" : "drawer drawer--closed"}>
       <div className="drawer__header">
@@ -43,7 +51,7 @@ export function BottomDrawer({ open, tab, onSelectTab, onToggleOpen }: BottomDra
       </div>
       {open && (
         <div className="drawer__content" role="tabpanel">
-          <p>{TAB_DESCRIPTIONS[tab]}: not available in this milestone.</p>
+          {content[tab]}
         </div>
       )}
     </section>

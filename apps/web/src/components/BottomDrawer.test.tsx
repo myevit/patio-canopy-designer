@@ -30,6 +30,33 @@ describe("BottomDrawer", () => {
     expect(screen.queryByText(/not available in this milestone/i)).not.toBeInTheDocument();
   });
 
+  it("renders the given bomContent instead of the placeholder when the BOM tab is active", () => {
+    render(
+      <BottomDrawer
+        open
+        tab="bom"
+        onSelectTab={() => {}}
+        onToggleOpen={() => {}}
+        bomContent={<p>Custom BOM content</p>}
+      />,
+    );
+    expect(screen.getByText("Custom BOM content")).toBeInTheDocument();
+    expect(screen.queryByText(/not available in this milestone/i)).not.toBeInTheDocument();
+  });
+
+  it("renders the given cutsContent instead of the placeholder when the Cuts tab is active", () => {
+    render(
+      <BottomDrawer
+        open
+        tab="cuts"
+        onSelectTab={() => {}}
+        onToggleOpen={() => {}}
+        cutsContent={<p>Custom cuts content</p>}
+      />,
+    );
+    expect(screen.getByText("Custom cuts content")).toBeInTheDocument();
+  });
+
   it("calls onToggleOpen when the collapse/expand control is clicked", async () => {
     const user = userEvent.setup();
     const onToggleOpen = vi.fn();
